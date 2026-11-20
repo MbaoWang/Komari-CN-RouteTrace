@@ -1,0 +1,208 @@
+{
+  "name": {
+    "zh_TW": "回程路由檢測",
+    "zh_CN": "回程路由检测",
+    "en": "CN Return Route"
+  },
+  "short": "cnroute",
+  "description": {
+    "zh_TW": "定時在各伺服器上追蹤回程到中國電信 / 聯通 / 移動的路徑，按 AS 壓縮顯示並判斷 CN2 GIA / GT、9929、CMIN2 等線路；本機 IP 自動遮罩。",
+    "zh_CN": "定时在各服务器上追踪回程到中国电信 / 联通 / 移动的路径，按 AS 压缩显示并判断 CN2 GIA / GT、9929、CMIN2 等线路；本机 IP 自动打码。",
+    "en": "Traces return routes from every server to China Telecom / Unicom / Mobile, collapses hops per AS and detects CN2 GIA / GT, 9929, CMIN2. Server IPs are masked."
+  },
+  "author": "MbaoWang",
+  "version": "1.0.0",
+  "entry": "script.js",
+  "permissions": {
+    "node": true,
+    "allowSystemRPC": true,
+    "allowRoutes": true,
+    "timeout": 60,
+    "allowHTMLInject": true
+  },
+  "pages": [
+    {
+      "file": "page/index.html",
+      "title": {
+        "zh_TW": "回程路由",
+        "zh_CN": "回程路由",
+        "en": "Return Route"
+      },
+      "visibility": "public"
+    },
+    {
+      "file": "page/index.html",
+      "title": {
+        "zh_TW": "回程路由",
+        "zh_CN": "回程路由",
+        "en": "Return Route"
+      },
+      "visibility": "admin"
+    }
+  ],
+  "configuration": {
+    "type": "managed",
+    "data": [
+      {
+        "key": "v4_title",
+        "name": "IPv4 檢測",
+        "type": "title"
+      },
+      {
+        "key": "v4_enabled",
+        "name": "啟用 IPv4 回程檢測",
+        "type": "switch",
+        "default": true
+      },
+      {
+        "key": "nodes",
+        "name": "IPv4 檢測的伺服器（不選 = 全部）",
+        "type": "nodes"
+      },
+      {
+        "key": "targets",
+        "name": "IPv4 回程目標（每行：名稱,IP,ct|cu|cm）",
+        "type": "textbox",
+        "default": "北京電信,219.141.140.10,ct\n北京聯通,202.106.195.68,cu\n北京移動,221.179.155.161,cm\n上海電信,202.96.209.133,ct\n上海聯通,210.22.97.1,cu\n上海移動,211.136.112.200,cm\n廣州電信,58.60.188.222,ct\n廣州聯通,210.21.196.6,cu\n廣州移動,120.196.165.24,cm"
+      },
+      {
+        "key": "v6_title",
+        "name": "IPv6 檢測",
+        "type": "title"
+      },
+      {
+        "key": "v6_enabled",
+        "name": "啟用 IPv6 回程檢測",
+        "type": "switch",
+        "default": false
+      },
+      {
+        "key": "nodes_v6",
+        "name": "IPv6 檢測的伺服器（不選 = 全部）",
+        "type": "nodes",
+        "help": "只選有 IPv6 的伺服器；沒有 IPv6 路由的會標示「此伺服器沒有 IPv6 路由」"
+      },
+      {
+        "key": "targets_v6",
+        "name": "IPv6 回程目標（每行：名稱,IPv6,ct|cu|cm）",
+        "type": "textbox",
+        "default": "北京移動,2409:8c00:8421:1303::55,cm\n上海電信,240e:e1:aa00:4000::24,ct\n上海聯通,2408:80f1:21:5003::a,cu\n上海移動,2409:8c1e:75b0:3003::26,cm\n廣州電信,240e:97c:2f:3000::44,ct\n廣州聯通,2408:8756:f50:1001::c,cu\n廣州移動,2409:8c54:871:1001::12,cm"
+      },
+      {
+        "key": "common_title",
+        "name": "共用設定",
+        "type": "title"
+      },
+      {
+        "key": "interval",
+        "name": "自動檢測間隔（分鐘，最少 5）",
+        "type": "number",
+        "default": 60
+      },
+      {
+        "key": "tool",
+        "name": "追蹤工具",
+        "type": "select",
+        "options": "auto,nexttrace,mtr,traceroute",
+        "default": "auto",
+        "help": "auto 依序嘗試 nexttrace → mtr → traceroute"
+      },
+      {
+        "key": "install_nexttrace",
+        "name": "伺服器沒有 NextTrace 時自動安裝",
+        "type": "switch",
+        "default": false
+      },
+      {
+        "key": "mask_mode",
+        "name": "本機 IP 遮罩方式",
+        "type": "select",
+        "options": "half,one,full",
+        "default": "half",
+        "help": "half: 1.2.*.*　one: 1.*.*.*　full: 全部隱藏"
+      },
+      {
+        "key": "mask_first_as",
+        "name": "同時遮罩本機機房 AS 內的跳點 IP 與地點",
+        "type": "switch",
+        "default": true
+      },
+      {
+        "key": "show_hop_ips",
+        "name": "在每個 AS 下顯示跳點 IP",
+        "type": "switch",
+        "default": true
+      },
+      {
+        "key": "public_data",
+        "name": "訪客可查看結果",
+        "type": "switch",
+        "default": true
+      },
+      {
+        "key": "float_button",
+        "name": "在 Komari 首頁顯示「回程路由」浮動按鈕",
+        "type": "switch",
+        "default": true,
+        "help": "點擊後以彈出視窗顯示結果（唯讀，不提供檢測按鈕）；需同時開啟「訪客可查看結果」訪客才看得到"
+      },
+      {
+        "key": "float_position",
+        "name": "浮動按鈕位置",
+        "type": "select",
+        "options": "right,left",
+        "default": "right",
+        "help": "right: 右下角　left: 左下角"
+      },
+      {
+        "key": "max_hops",
+        "name": "最大跳數",
+        "type": "number",
+        "default": 30
+      },
+      {
+        "key": "timeout",
+        "name": "等待結果逾時（秒）",
+        "type": "number",
+        "default": 240
+      },
+      {
+        "key": "tg_title",
+        "name": "Telegram 機器人",
+        "type": "title"
+      },
+      {
+        "key": "tg_token",
+        "name": "Bot Token（向 @BotFather 取得，留空 = 停用）",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "key": "tg_chat_ids",
+        "name": "允許的 Chat ID / User ID（逗號分隔）",
+        "type": "string",
+        "default": "",
+        "help": "對機器人傳 /id 即可取得；只有這些 ID 能操作機器人"
+      },
+      {
+        "key": "tg_notify_change",
+        "name": "自動檢測發現線路變更時推播",
+        "type": "switch",
+        "default": true
+      },
+      {
+        "key": "tg_allow_custom",
+        "name": "允許 /trace 檢測自訂 IP",
+        "type": "switch",
+        "default": true
+      },
+      {
+        "key": "tg_api_base",
+        "name": "Telegram API 位址（反代時修改）",
+        "type": "string",
+        "default": "https://api.telegram.org"
+      }
+    ]
+  },
+  "url": "https://github.com/MbaoWang/Komari-CN-RouteTrace"
+}
