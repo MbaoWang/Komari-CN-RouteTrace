@@ -4,8 +4,6 @@
 (function () {
   try {
     if (window.top !== window) return; // 不在 iframe 內顯示（例如後台嵌入的插件頁）
-    var p = location.pathname;
-    if (/^\/(admin|terminal|api)(\/|$)/.test(p)) return; // 只在前台顯示
     if (window.__cnrouteFloat) return;
     window.__cnrouteFloat = true;
   } catch (e) { return; }
@@ -21,11 +19,36 @@
     '<circle cx="18" cy="5.5" r="0.6" fill="currentColor"/>' +
     "</svg>";
 
+  // 只在前台顯示：後台（/admin）、終端機、API 頁面都不顯示。
+  // Komari 的前台與後台是同一個單頁應用，從首頁點進後台時網址會變但頁面不重新載入，
+  // 所以要持續追蹤網址，切到後台時隱藏按鈕並關閉彈出視窗，切回前台再顯示。
+  function onFront() { return !/^\/(admin|terminal|api)(\/|$)/.test(location.pathname); }
+  var mounted = null;   // { apply, close }
+  var fetched = false;
+  function sync() {
+    if (mounted) {
+      if (!onFront()) mounted.close();
+      mounted.apply();
+    } else if (onFront() && !fetched) {
+      fetched = true;
+      fetch("/api/cnroute/button", { credentials: "same-origin" })
+        .then(function (r) { return r.ok ? r.json() : { show: false }; })
+        .then(function (cfg) { if (cfg && cfg.show) mount(cfg); })
+        .catch(function () {});
+    }
+  }
   function start() {
-    fetch("/api/cnroute/button", { credentials: "same-origin" })
-      .then(function (r) { return r.ok ? r.json() : { show: false }; })
-      .then(function (cfg) { if (cfg && cfg.show) mount(cfg); })
-      .catch(function () {});
+    try {
+      ["pushState", "replaceState"].forEach(function (k) {
+        var orig = history[k];
+        history[k] = function () { var r = orig.apply(this, arguments); setTimeout(sync, 0); return r; };
+      });
+    } catch (e) {}
+    window.addEventListener("popstate", sync);
+    window.addEventListener("hashchange", sync);
+    var lastPath = location.pathname;
+    setInterval(function () { if (location.pathname !== lastPath) { lastPath = location.pathname; sync(); } }, 1000);
+    sync();
   }
 
   function isDark() {
@@ -154,7 +177,7 @@
     function applyStyle() {
       var css = "position:fixed;z-index:2147483000;bottom:" + stackBottom + "px;" + side + ":" + EDGE + "px;";
       if (pos) { var c = clamp(pos); css = "position:fixed;z-index:2147483000;left:" + c.x + "px;top:" + c.y + "px;"; }
-      host.style.cssText = css + (host.dataset.vars || "") + ";" + (host.dataset.look || "");
+      host.style.cssText = css + (host.dataset.vars || "") + ";" + (host.dataset.look || "") + (onFront() ? "" : ";display:none");
     }
     window.addEventListener("resize", function () { applyStyle(); restack(); });
     // 其他插件的按鈕可能比較晚出現：載入後重新偵測幾次，並監看 body 新增的元素
@@ -208,6 +231,7 @@
     root.querySelector(".x").addEventListener("click", close);
     mask.addEventListener("click", function (e) { if (e.target === mask) close(); });
     document.addEventListener("keydown", function (e) { if (e.key === "Escape") close(); });
+    mounted = { apply: applyStyle, close: close };
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
