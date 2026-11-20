@@ -1,0 +1,41 @@
+# 推送 v* 標籤時自動打包插件並發布 Release
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check manifest version matches tag
+        run: |
+          want="${GITHUB_REF_NAME#v}"
+          have="$(jq -r .version komari-plugin.json)"
+          if [ "$want" != "$have" ]; then
+            echo "::error::標籤 $GITHUB_REF_NAME 與 komari-plugin.json 的 version ($have) 不一致"
+            exit 1
+          fi
+
+      - name: Build plugin zip
+        run: |
+          zip -r komari-cnroute.zip komari-plugin.json script.js lib.js prefix4.js prefix6.js \
+            telegram.js float.js probe.sh page README.md LICENSE
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes=".github/release-notes/${GITHUB_REF_NAME}.md"
+          if [ -f "$notes" ]; then
+            gh release create "$GITHUB_REF_NAME" komari-cnroute.zip --title "$GITHUB_REF_NAME" --notes-file "$notes"
+          else
+            gh release create "$GITHUB_REF_NAME" komari-cnroute.zip --title "$GITHUB_REF_NAME" --generate-notes
+          fi
