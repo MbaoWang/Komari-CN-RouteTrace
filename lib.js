@@ -627,6 +627,36 @@ function withTags(res) {
   return res;
 }
 
+// Zstatic CDN 三網節點（https://www.zstaticcdn.com/ ，節點清單取自其 /api/v1/DescribeAllNodes）。
+// 每個省份電信 / 聯通 / 移動各一個節點：<代碼>-<ct|cu|cm>-v4.ip.zstaticcdn.com，開放 TCP 80。
+// IPv6 節點把 v4 換成 v6（與網站的 IPv6 切換相同）：<代碼>-<ct|cu|cm>-v6.ip.zstaticcdn.com
+const ZSTATIC_PROVINCES = [
+  ["bj", "北京", "北京"], ["tj", "天津", "天津"], ["he", "河北", "河北"], ["sx", "山西", "山西"], ["nm", "內蒙古", "内蒙古"],
+  ["ln", "遼寧", "辽宁"], ["jl", "吉林", "吉林"], ["hl", "黑龍江", "黑龙江"], ["sh", "上海", "上海"], ["js", "江蘇", "江苏"],
+  ["zj", "浙江", "浙江"], ["ah", "安徽", "安徽"], ["fj", "福建", "福建"], ["jx", "江西", "江西"], ["sd", "山東", "山东"],
+  ["ha", "河南", "河南"], ["hb", "湖北", "湖北"], ["hn", "湖南", "湖南"], ["gd", "廣東", "广东"], ["gx", "廣西", "广西"],
+  ["hi", "海南", "海南"], ["cq", "重慶", "重庆"], ["sc", "四川", "四川"], ["gz", "貴州", "贵州"], ["yn", "雲南", "云南"],
+  ["xz", "西藏", "西藏"], ["sn", "陝西", "陕西"], ["gs", "甘肅", "甘肃"], ["qh", "青海", "青海"], ["nx", "寧夏", "宁夏"],
+  ["xj", "新疆", "新疆"],
+];
+
+// 「北京,上海,廣東」/「bj,sh,gd」/「全部」→ Zstatic 目標
+function zstaticTargets(spec, ver) {
+  const v = ver === 6 ? 6 : 4;
+  const words = String(spec || "").split(/[\s,，、]+/).map((x) => x.trim()).filter(Boolean);
+  const all = words.some((w) => /^(全部|all)$/i.test(w));
+  const picked = all ? ZSTATIC_PROVINCES : ZSTATIC_PROVINCES.filter(([code, tw, cn]) =>
+    words.some((w) => w.toLowerCase() === code || w === tw || w === cn || tw.startsWith(w) || cn.startsWith(w)));
+  const out = [];
+  for (const [code, tw] of picked) {
+    for (const [isp, name] of [["ct", "電信"], ["cu", "聯通"], ["cm", "移動"]]) {
+      out.push({ id: (v === 6 ? "y" : "z") + code + isp, v, label: tw + name, ip: `${code}-${isp}-v${v}.ip.zstaticcdn.com`, port: 80, isp });
+    }
+  }
+  return out;
+}
+
+// 每行：名稱,目標[,ct|cu|cm[,port]]；目標可填 IP 或網域（網域由伺服器自己解析）
 function parseTargets(text, ver) {
   const out = [];
   const pfx = ver === 6 ? "s" : "t";
@@ -636,11 +666,14 @@ function parseTargets(text, ver) {
     const f = line.split(/[,，\s]+/).filter(Boolean);
     if (f.length < 2) return;
     const ip = f[1];
-    if (!/^[0-9a-fA-F:.]+$/.test(ip)) return;
-    const v = ip.includes(":") ? 6 : 4;
+    const isIP = /^[0-9a-fA-F:.]+$/.test(ip) && /[.:]/.test(ip) && !/[g-z]/i.test(ip);
+    if (!isIP && !/^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$/.test(ip)) return;
+    // 網域看名稱裡的 v6 / ipv6 字樣判斷版本，否則視為 IPv4
+    const v = isIP ? (ip.includes(":") ? 6 : 4) : /(^|[.-])(v6|ipv6)([.-]|$)/i.test(ip) ? 6 : 4;
+    const port = /^\d{1,5}$/.test(f[3] || "") ? Number(f[3]) : 80;
     if (ver && v !== ver) return;
     const isp = (f[2] || "").toLowerCase();
-    out.push({ id: pfx + i, v, label: f[0], ip, isp: ["ct", "cu", "cm"].includes(isp) ? isp : guessIsp(f[0]) });
+    out.push({ id: pfx + i, v, label: f[0], ip, port, isp: ["ct", "cu", "cm"].includes(isp) ? isp : guessIsp(f[0]) });
   });
   return out;
 }
@@ -652,4 +685,4 @@ function guessIsp(label) {
   return "";
 }
 
-module.exports = { AS_NAMES, FAMILY_NAME, prefixInfo, familyOf, isPrivateIP, maskIP, parseOutput, parseBlock, compressPath, classify, parseTargets };
+module.exports = { ZSTATIC_PROVINCES, zstaticTargets, AS_NAMES, FAMILY_NAME, prefixInfo, familyOf, isPrivateIP, maskIP, parseOutput, parseBlock, compressPath, classify, parseTargets };

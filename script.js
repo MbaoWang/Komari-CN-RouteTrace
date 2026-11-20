@@ -65,10 +65,20 @@ async function getCfg() {
     v6Enabled: c.v6_enabled === true,
     nodes4: nodeList(c.nodes),
     nodes6: nodeList(c.nodes_v6),
-    targets4: lib.parseTargets(c.targets || DEFAULT_TARGETS, 4),
-    targets6: lib.parseTargets(c.targets_v6 || DEFAULT_TARGETS_V6, 6),
+    // IPv4 目標：Zstatic CDN 省份節點（預設）或自訂清單
+    v4Source: c.v4_source === "custom" ? "custom" : "zstatic",
+    targets4: c.v4_source === "custom"
+      ? lib.parseTargets(c.targets || DEFAULT_TARGETS, 4)
+      : lib.zstaticTargets(c.zstatic_provinces || "北京,上海,廣東", 4),
+    v6Source: c.v6_source === "custom" ? "custom" : "zstatic",
+    targets6: c.v6_source === "custom"
+      ? lib.parseTargets(c.targets_v6 || DEFAULT_TARGETS_V6, 6)
+      : lib.zstaticTargets(c.zstatic_provinces || "北京,上海,廣東", 6),
     interval: Math.max(5, Number(c.interval) || 60),
     tool: ["auto", "nexttrace", "mtr", "traceroute"].includes(c.tool) ? c.tool : "auto",
+    // 追蹤方式：auto = 網域目標（例如 Zstatic 節點）用 TCP，IP 目標用 ICMP
+    traceProto: ["auto", "icmp", "tcp"].includes(c.trace_proto) ? c.trace_proto : "auto",
+    parallel: Math.min(10, Math.max(1, Number(c.parallel) || 3)),
     installNexttrace: c.install_nexttrace === true,
     maskMode: c.mask_mode || "half",
     maskFirstAS: c.mask_first_as !== false,
@@ -93,13 +103,14 @@ async function listClients() {
 }
 
 function buildCommand(cfg, targets) {
-  const args = targets.map((t) => `${t.id}=${t.ip}`).join(" ");
+  const protoOf = (t) => t.proto || (cfg.traceProto === "auto" ? (/[g-z]/i.test(t.ip) ? "tcp" : "icmp") : cfg.traceProto);
+  const args = targets.map((t) => `${t.id}=${t.ip},${t.port || 80},${protoOf(t)},${t.v || 4}`).join(" ");
   // base64 包裝，避免 shell 引號問題
   // agent 以 `sh -s` 從 stdin 讀指令，子程序 stdin 要導到 /dev/null 以免吃掉後續指令
   return [
     `F=$(mktemp 2>/dev/null || echo /tmp/.komari-cnroute.$$)`,
     `echo ${PROBE_B64} | base64 -d > "$F"`,
-    `bash "$F" ${cfg.tool} ${cfg.installNexttrace} ${cfg.maxHops} ${args} </dev/null`,
+    `bash "$F" ${cfg.tool} ${cfg.installNexttrace} ${cfg.maxHops} ${cfg.parallel} ${args} </dev/null`,
     `RC=$?; rm -f "$F"; exit $RC`,
   ].join("\n");
 }
@@ -122,14 +133,17 @@ function buildNodeResult(client, cfg, output, exitCode, targets) {
     if (!b || b.note) { node.targets.push({ label: t.label, v, isp: t.isp, ip: t.ip, error: b ? b.note : "沒有結果", segments: [], tags: [] }); continue; }
     const src = v === 6 ? client.ipv6 : client.ipv4;
     const comp = lib.compressPath(b.hops, { maskMode: cfg.maskMode, maskFirstAS: cfg.maskFirstAS, srcIP: src });
-    const cls = lib.classify(b.hops, t.isp, t.ip, { transitRtt: cfg.transitRtt });
+    // 網域目標以伺服器解析出的 IP 判斷是否到達
+    const dstIP = b.ip && b.ip !== "-" ? b.ip : t.ip;
+    const cls = lib.classify(b.hops, t.isp, dstIP, { transitRtt: cfg.transitRtt });
     if (!cfg.showIPs) for (const s of comp.segments) s.ips = [];
-    const reached = b.hops.some((h) => h.ip === t.ip);
+    const reached = b.hops.some((h) => h.ip === dstIP);
     node.targets.push({
       label: t.label,
       v,
       isp: t.isp,
       ip: t.ip,
+      resolved: dstIP !== t.ip ? dstIP : "",
       reached,
       hop_count: b.hops.length,
       last_rtt: comp.last_rtt,
@@ -205,7 +219,8 @@ async function runGroup(cfg, map, uuids, targets, opts) {
   const pending = new Set(uuids);
   const out = {};
   const done = (async () => {
-    const deadline = Date.now() + cfg.timeout * 1000;
+    const rounds = Math.ceil(targets.length / cfg.parallel);
+    const deadline = Date.now() + Math.max(cfg.timeout, rounds * 40 + 30) * 1000;
     while (pending.size && Date.now() < deadline) {
       await sleep(5000);
       let rows = [];

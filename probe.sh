@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 MbaoWang
 # komari-cnroute 回程探測腳本（由 Komari 插件透過遠端執行下發到 agent）
-# 用法: bash probe.sh <tool> <install_nexttrace> <max_hops> <id>=<ip> [<id>=<ip> ...]
+# 用法: bash probe.sh <tool> <install_nexttrace> <max_hops> <parallel> <id>=<目標>,<port>,<icmp|tcp>,<4|6> ...
+#   目標：IP 或網域（網域由這台伺服器自己解析，例如 Zstatic CDN 的 sh-ct-v4.ip.zstaticcdn.com）
 #   tool: auto | nexttrace | mtr | traceroute
 # 輸出（給插件解析）:
 #   ##TOOL <名稱>
@@ -14,7 +15,8 @@
 TOOL="${1:-auto}"
 INSTALL_NT="${2:-false}"
 MAXHOP="${3:-30}"
-shift 3 2>/dev/null || true
+PAR="${4:-3}"
+shift 4 2>/dev/null || true
 
 export LANG=C LC_ALL=C
 export PATH="$PATH:/usr/local/bin:/usr/sbin:/sbin"
@@ -79,10 +81,33 @@ for i,att in enumerate(hops):
     print("H|%s|%s|%s|%s|%s|%s"%(ttl,ip,asn,owner,rtt,loc))
 '
 
+# 網域解析：依目標版本取 A 或 AAAA
+resolve() {
+  local h="$1" v="$2" r=""
+  if [ "$v" = 6 ]; then
+    r=$(getent ahostsv6 "$h" 2>/dev/null | awk 'NR==1{print $1}')
+    [ -z "$r" ] && have dig && r=$(dig +short AAAA "$h" 2>/dev/null | grep -E '^[0-9a-fA-F:]+$' | head -1)
+  else
+    r=$(getent ahostsv4 "$h" 2>/dev/null | awk 'NR==1{print $1}')
+    [ -z "$r" ] && have dig && r=$(dig +short A "$h" 2>/dev/null | grep -E '^[0-9.]+$' | head -1)
+  fi
+  echo "$r"
+}
+
 run_one() {
-  local id="$1" ip="$2" out="$3" fam=""
-  case "$ip" in *:*) fam="-6" ;; esac
+  local id="$1" target="$2" port="$3" proto="$4" ver="$5" out="$6" ip fam=""
   {
+    ip="$target"
+    case "$target" in
+      *[!0-9a-fA-F:.]*) ip="$(resolve "$target" "$ver")" ;;
+    esac
+    if [ -z "$ip" ]; then
+      echo "##BEGIN $id - none"
+      echo "##NOTE 無法解析網域 $target"
+      echo "##END $id"
+      return
+    fi
+    case "$ip" in *:*) fam="-6" ;; esac
     # IPv6 目標：伺服器沒有 IPv6 路由時直接回報，不浪費時間追蹤
     if [ -n "$fam" ] && have ip && ! ip -6 route get "$ip" >/dev/null 2>&1; then
       echo "##BEGIN $id $ip none"
@@ -90,27 +115,32 @@ run_one() {
       echo "##END $id"
       return
     fi
+    # TCP 模式：送 SYN 到指定 port（例如 Zstatic 節點的 80），目的地一定會回應
+    local nt_tcp="" mtr_tcp="" tr_tcp=""
+    if [ "$proto" = tcp ]; then
+      nt_tcp="-T -p $port"; mtr_tcp="--tcp --port $port"; tr_tcp="-T -p $port"
+    fi
     case "$T" in
       nexttrace)
         if have python3; then
           echo "##BEGIN $id $ip lines"
-          nexttrace -j -q 1 -m "$MAXHOP" "$ip" 2>/dev/null | python3 -c "$NT_COMPACT"
+          nexttrace $nt_tcp -j -q 1 -m "$MAXHOP" "$ip" 2>/dev/null | python3 -c "$NT_COMPACT"
         else
           echo "##BEGIN $id $ip ntjson"
-          nexttrace -j -q 1 -m "$MAXHOP" "$ip" 2>/dev/null
+          nexttrace $nt_tcp -j -q 1 -m "$MAXHOP" "$ip" 2>/dev/null
         fi ;;
       mtr)
         if mtr --help 2>&1 | grep -q -- '--json'; then
           echo "##BEGIN $id $ip mtrjson"
-          mtr $fam -z -n -j -c 2 -m "$MAXHOP" "$ip" 2>/dev/null
+          mtr $fam $mtr_tcp -z -n -j -c 2 -m "$MAXHOP" "$ip" 2>/dev/null
         else
           echo "##BEGIN $id $ip mtrtxt"
-          mtr $fam -z -n -r -w -c 2 -m "$MAXHOP" "$ip" 2>/dev/null
+          mtr $fam $mtr_tcp -z -n -r -w -c 2 -m "$MAXHOP" "$ip" 2>/dev/null
         fi ;;
       traceroute)
         echo "##BEGIN $id $ip tr"
-        traceroute $fam -A -n -q 1 -w 2 -m "$MAXHOP" "$ip" 2>/dev/null \
-          || traceroute $fam -n -q 1 -w 2 -m "$MAXHOP" "$ip" 2>/dev/null ;;
+        traceroute $fam $tr_tcp -A -n -q 1 -w 2 -m "$MAXHOP" "$ip" 2>/dev/null \
+          || traceroute $fam $tr_tcp -n -q 1 -w 2 -m "$MAXHOP" "$ip" 2>/dev/null ;;
     esac
     echo
     echo "##END $id"
@@ -120,13 +150,23 @@ run_one() {
 TMP="$(mktemp -d 2>/dev/null || echo /tmp/cnroute.$$)"
 mkdir -p "$TMP"
 n=0
+case "$PAR" in ''|*[!0-9]*) PAR=3 ;; esac
+[ "$PAR" -lt 1 ] && PAR=1
 for pair in "$@"; do
-  id="${pair%%=*}"; ip="${pair#*=}"
-  case "$ip" in *[!0-9a-fA-F:.]*|"") continue ;; esac   # 僅允許 IP，避免注入
+  # 只允許 IP / 網域字元，避免注入
+  case "$pair" in *[!A-Za-z0-9.:,=_-]*) continue ;; esac
+  id="${pair%%=*}"; rest="${pair#*=}"
+  target="${rest%%,*}"; rest="${rest#*,}"
+  port="${rest%%,*}"; rest="${rest#*,}"
+  proto="${rest%%,*}"; ver="${rest#*,}"
+  [ -z "$target" ] && continue
+  case "$port" in ''|*[!0-9]*) port=80 ;; esac
+  [ "$proto" = tcp ] || proto=icmp
+  [ "$ver" = 6 ] || ver=4
   n=$((n+1))
-  run_one "$id" "$ip" "$TMP/$n.out" &
-  # nexttrace 同時跑太多會互相干擾，每 3 個等一下
-  if [ $((n % 3)) -eq 0 ]; then wait; fi
+  run_one "$id" "$target" "$port" "$proto" "$ver" "$TMP/$n.out" &
+  # 同時跑太多會互相干擾，每 PAR 個等一下
+  if [ $((n % PAR)) -eq 0 ]; then wait; fi
 done
 wait
 for i in $(seq 1 "$n"); do cat "$TMP/$i.out" 2>/dev/null; done

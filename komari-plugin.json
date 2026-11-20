@@ -11,7 +11,7 @@
     "en": "Traces return routes from every server to China Telecom / Unicom / Mobile, collapses hops per AS and detects CN2 GIA / GT, 9929, CMIN2. Server IPs are masked."
   },
   "author": "MbaoWang",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "entry": "script.js",
   "permissions": {
     "node": true,
@@ -60,10 +60,26 @@
         "type": "nodes"
       },
       {
+        "key": "v4_source",
+        "name": "IPv4 目標來源",
+        "type": "select",
+        "options": "zstatic,custom",
+        "default": "zstatic",
+        "help": "zstatic: Zstatic CDN 各省三網節點（開放 TCP 80，追蹤一定能到達終點）　custom: 使用下方自訂目標"
+      },
+      {
+        "key": "zstatic_provinces",
+        "name": "Zstatic 省份（IPv4 / IPv6 共用，逗號分隔，或填「全部」）",
+        "type": "string",
+        "default": "北京,上海,廣東",
+        "help": "可填省份名稱或代碼，例如：北京,上海,廣東,四川 或 bj,sh,gd,sc。每個省份會測電信 / 聯通 / 移動三個節點；填「全部」= 31 省 93 個目標，一輪檢測需要較久"
+      },
+      {
         "key": "targets",
-        "name": "IPv4 回程目標（每行：名稱,IP,ct|cu|cm）",
+        "name": "IPv4 自訂目標（每行：名稱,IP 或網域,ct|cu|cm[,port]）",
         "type": "textbox",
-        "default": "北京電信,219.141.140.10,ct\n北京聯通,202.106.195.68,cu\n北京移動,221.179.155.161,cm\n上海電信,202.96.209.133,ct\n上海聯通,210.22.97.1,cu\n上海移動,211.136.112.200,cm\n廣州電信,58.60.188.222,ct\n廣州聯通,210.21.196.6,cu\n廣州移動,120.196.165.24,cm"
+        "default": "北京電信,219.141.140.10,ct\n北京聯通,202.106.195.68,cu\n北京移動,221.179.155.161,cm\n上海電信,202.96.209.133,ct\n上海聯通,210.22.97.1,cu\n上海移動,211.136.112.200,cm\n廣州電信,58.60.188.222,ct\n廣州聯通,210.21.196.6,cu\n廣州移動,120.196.165.24,cm",
+        "help": "「IPv4 目標來源」選 custom 時才使用"
       },
       {
         "key": "v6_title",
@@ -83,10 +99,19 @@
         "help": "只選有 IPv6 的伺服器；沒有 IPv6 路由的會標示「此伺服器沒有 IPv6 路由」"
       },
       {
+        "key": "v6_source",
+        "name": "IPv6 目標來源",
+        "type": "select",
+        "options": "zstatic,custom",
+        "default": "zstatic",
+        "help": "zstatic: Zstatic CDN 各省三網 IPv6 節點（省份與 IPv4 共用上方「Zstatic 省份」設定）　custom: 使用下方自訂目標"
+      },
+      {
         "key": "targets_v6",
-        "name": "IPv6 回程目標（每行：名稱,IPv6,ct|cu|cm）",
+        "name": "IPv6 自訂目標（每行：名稱,IPv6 或網域,ct|cu|cm[,port]）",
         "type": "textbox",
-        "default": "北京移動,2409:8c00:8421:1303::55,cm\n上海電信,240e:e1:aa00:4000::24,ct\n上海聯通,2408:80f1:21:5003::a,cu\n上海移動,2409:8c1e:75b0:3003::26,cm\n廣州電信,240e:97c:2f:3000::44,ct\n廣州聯通,2408:8756:f50:1001::c,cu\n廣州移動,2409:8c54:871:1001::12,cm"
+        "default": "北京移動,2409:8c00:8421:1303::55,cm\n上海電信,240e:e1:aa00:4000::24,ct\n上海聯通,2408:80f1:21:5003::a,cu\n上海移動,2409:8c1e:75b0:3003::26,cm\n廣州電信,240e:97c:2f:3000::44,ct\n廣州聯通,2408:8756:f50:1001::c,cu\n廣州移動,2409:8c54:871:1001::12,cm",
+        "help": "「IPv6 目標來源」選 custom 時才使用"
       },
       {
         "key": "common_title",
@@ -106,6 +131,21 @@
         "options": "auto,nexttrace,mtr,traceroute",
         "default": "auto",
         "help": "auto 依序嘗試 nexttrace → mtr → traceroute"
+      },
+      {
+        "key": "trace_proto",
+        "name": "追蹤方式",
+        "type": "select",
+        "options": "auto,icmp,tcp",
+        "default": "auto",
+        "help": "auto: 網域目標（Zstatic 節點）用 TCP 80、IP 目標用 ICMP　icmp / tcp: 全部固定使用。TCP 追蹤需要 root 權限（agent 預設是 root）"
+      },
+      {
+        "key": "parallel",
+        "name": "同時追蹤的目標數",
+        "type": "number",
+        "default": 3,
+        "help": "1～10；目標多時可調高加快檢測，太高可能互相干擾"
       },
       {
         "key": "install_nexttrace",

@@ -58,6 +58,19 @@ IPv4 / IPv6 的位址歸屬都使用 [bgp.tools](https://bgp.tools) 路由表的
 只有 IPv6 的 CN2 之後還有多跳 AS4134（分不出是 163 骨幹還是省網）這種路徑再完整也無法斷定的情況，才會保留「推測」。前綴會變動，可在插件目錄執行 `python3 tools/gen-prefixes.py` 重新產生兩張表。
 ICMP 追蹤結果可能和實際 TCP 流量走法不同，結果僅供參考。
 
+## 檢測目標
+
+預設使用 [Zstatic CDN](https://www.zstaticcdn.com/) 的各省三網節點當作回程終點（節點清單取自其 `/api/v1/DescribeAllNodes`）：
+
+- 網址格式：`<省份代碼>-<ct|cu|cm>-v4.ip.zstaticcdn.com`，IPv6 把 `v4` 換成 `v6`；節點開放 TCP 80
+- 插件設定「Zstatic 省份」填省份名稱或代碼（例如 `北京,上海,廣東` 或 `bj,sh,gd`，簡繁都可以），填「全部」= 31 省
+- 網域由伺服器自己解析，CDN 換 IP 也不用改設定
+- 「追蹤方式」預設 auto：網域目標用 TCP 80（目的地一定會回應），IP 目標用 ICMP；TCP 追蹤需要 root 權限（agent 預設是 root）
+- 也可以把「IPv4 / IPv6 目標來源」改成 custom，自行填入目標（每行 `名稱,IP 或網域,ct|cu|cm[,port]`）
+- 省份多時可調高「同時追蹤的目標數」；等待時間會依目標數自動放寬
+
+舊版預設的北京 / 上海 / 廣州 DNS 伺服器 IP 取自 oneclickvirt/backtrace，這些主機不一定回應追蹤封包，常出現「未到達」。
+
 ## IPv4 / IPv6
 
 插件設定分成「IPv4 檢測」和「IPv6 檢測」兩區，各自有開關、伺服器選擇和目標清單：
@@ -66,7 +79,7 @@ ICMP 追蹤結果可能和實際 TCP 流量走法不同，結果僅供參考。
 - 每區的「檢測的伺服器」不選 = 全部；例如 IPv4 測全部、IPv6 只選有 IPv6 的幾台
 - 網頁右上角可以切換 IPv4 / IPv6，Telegram 回覆會分成兩段
 - 選了 IPv6 但伺服器沒有 IPv6 路由時，會標示「此伺服器沒有 IPv6 路由」
-- 預設 IPv6 目標取自 backtrace，只保留明確屬於三網位址段（240e / 2408 / 2409）的 7 個
+- IPv6 預設也使用 Zstatic 的 IPv6 節點；自訂模式的預設清單取自 backtrace（三網位址段 240e / 2408 / 2409 的 7 個）
 
 ## 隱私 / 遮罩
 
@@ -162,5 +175,6 @@ Komari 主機連不到 Telegram 時，可在「Telegram API 位址」填自建�
 
 - [oneclickvirt/backtrace](https://github.com/oneclickvirt/backtrace)（Apache-2.0）：線路判別規則、未宣告骨幹網段的備援表
   （`lib.js` 的 `PREFIX4_FALLBACK`、CMIN2 網段）與預設回程目標 IP 參考自此專案
+- [Zstatic CDN](https://www.zstaticcdn.com/)：預設的各省三網檢測節點
 - [bgp.tools](https://bgp.tools)：`prefix4.js` / `prefix6.js` 由其公開路由表產生
 - [Inter](https://github.com/rsms/inter)（SIL OFL 1.1）：`page/fonts/inter-latin-wght-normal.woff2`，授權全文見 `page/fonts/Inter-OFL.txt`

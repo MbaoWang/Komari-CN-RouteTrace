@@ -222,7 +222,7 @@ async function cmdTrace(cfg, chatId, args) {
     if (!/^(\d{1,3}(\.\d{1,3}){3}|[0-9a-fA-F:]+:[0-9a-fA-F:]*)$/.test(ip)) return send(cfg, chatId, "IP 格式不正確（僅支援 IPv4 / IPv6，不支援網域）。");
     const c = await resolveOrHint(cfg, chatId, q, "");
     if (!c) return;
-    const target = { id: "c0", v: ip.includes(":") ? 6 : 4, label: "自訂 " + ip, ip, isp: "" };
+    const target = { id: "c0", v: ip.includes(":") ? 6 : 4, label: "自訂 " + ip, ip, port: 80, proto: "icmp", isp: "" };
     const msg = await send(cfg, chatId, `⏳ <b>${esc(c.name)}</b> → <code>${esc(ip)}</code> 檢測中…`);
     const r = await deps.probe([c.uuid], { targets: [target], store: false });
     if (!r.started.length) return replace(cfg, chatId, msg.message_id, r.busy && r.busy.length ? "⏳ 這台伺服器正在檢測中，請稍後再試。" : `❌ 下發失敗：${esc(r.error || "伺服器離線")}`);
