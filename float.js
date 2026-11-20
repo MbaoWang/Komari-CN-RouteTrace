@@ -22,7 +22,18 @@
   // 只在前台顯示：後台（/admin）、終端機、API 頁面都不顯示。
   // Komari 的前台與後台是同一個單頁應用，從首頁點進後台時網址會變但頁面不重新載入，
   // 所以要持續追蹤網址，切到後台時隱藏按鈕並關閉彈出視窗，切回前台再顯示。
-  function onFront() { return !/^\/(admin|terminal|api)(\/|$)/.test(location.pathname); }
+  // 自訂後台路徑（admin-path 插件）：後台頁面的程式 / 樣式檔會被改寫成「<自訂路徑>/_static/assets/...」，
+  // 前台頁面不會有這種路徑，所以不用知道自訂路徑（也不會洩漏給訪客）就能判斷這頁是後台
+  var adminDoc = null;
+  function isAdminDoc() {
+    if (adminDoc === null) {
+      try {
+        adminDoc = !!document.querySelector('script[src*="/_static/assets/"], link[href*="/_static/assets/"]');
+      } catch (e) { adminDoc = false; }
+    }
+    return adminDoc;
+  }
+  function onFront() { return !isAdminDoc() && !/^\/(admin|terminal|api)(\/|$)/.test(location.pathname); }
   var mounted = null;   // { apply, close }
   var fetched = false;
   function sync() {
