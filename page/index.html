@@ -6,6 +6,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>回程路由檢測</title>
 <style>
+  /* 字體與 Komari-Theme-LuminaPlus 一致：Inter Variable（隨插件打包，SIL OFL 1.1，見 fonts/Inter-OFL.txt）＋ 系統中文字體 */
+  @font-face {
+    font-family: "Inter Variable";
+    font-style: normal;
+    font-display: swap;
+    font-weight: 100 900;
+    src: url(fonts/inter-latin-wght-normal.woff2) format("woff2-variations");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+  :root {
+    --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter Variable", "Inter", system-ui,
+      "PingFang TC", "PingFang SC", "Hiragino Sans GB", "Microsoft JhengHei", "Microsoft YaHei", sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace;
+    --font-numeric: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+  }
   :root {
     --bg: #f6f7f9; --card: #ffffff; --fg: #1d2129; --muted: #6b7280; --line: #e5e7eb;
     --accent: #2563eb; --ct: #2563eb; --cu: #dc2626; --cm: #059669; --warn: #b45309; --chip: #eef2ff;
@@ -15,7 +30,7 @@
       --accent: #60a5fa; --ct: #60a5fa; --cu: #f87171; --cm: #34d399; --warn: #fbbf24; --chip: #1e2533; }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 var(--font-sans); }
   header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; padding: 16px; }
   h1 { font-size: 18px; margin: 0; }
   .sub { color: var(--muted); font-size: 12px; }
@@ -24,7 +39,7 @@
   .node > summary { list-style: none; cursor: pointer; padding: 12px 14px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .node > summary::-webkit-details-marker { display: none; }
   .name { font-weight: 600; font-size: 15px; }
-  .ip { font-family: ui-monospace, monospace; color: var(--muted); font-size: 12px; }
+  .ip { font-family: var(--font-mono); color: var(--muted); font-size: 12px; }
   .spacer { flex: 1; }
   .chip { display: inline-block; padding: 1px 8px; border-radius: 999px; background: var(--chip); font-size: 12px; white-space: nowrap; }
   .chip.ct { color: var(--ct); } .chip.cu { color: var(--cu); } .chip.cm { color: var(--cm); }
@@ -38,13 +53,14 @@
   .t > summary::-webkit-details-marker { display: none; }
   .label { font-weight: 600; }
   .label.ct { color: var(--ct); } .label.cu { color: var(--cu); } .label.cm { color: var(--cm); }
-  .aspath { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
-  .rtt { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .aspath { font-family: var(--font-mono); font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+  .rtt { font-family: var(--font-numeric); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .hopn, .cell .meta { font-family: var(--font-numeric); }
   .segs { padding: 4px 14px 12px; display: grid; gap: 6px; }
   .seg { display: grid; grid-template-columns: 80px 1fr auto; gap: 8px; padding: 6px 10px; border-left: 3px solid var(--accent); background: var(--bg); border-radius: 4px; }
   .seg.lan { border-left-color: var(--line); }
-  .asn { font-family: ui-monospace, monospace; font-weight: 600; }
-  .ips { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+  .asn { font-family: var(--font-mono); font-weight: 600; }
+  .ips { font-family: var(--font-mono); font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
   .hopn { color: var(--muted); font-size: 12px; white-space: nowrap; text-align: right; }
   button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--fg); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
   button:hover { border-color: var(--accent); }

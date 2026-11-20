@@ -39,7 +39,7 @@
       ":host{all:initial}" +
       ".btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;width:56px;height:56px;padding:0;" +
       "border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--fg);" +
-      "font:500 10px/1 system-ui,-apple-system,'PingFang TC','Microsoft JhengHei',sans-serif;" +
+      "font:500 10px/1 -apple-system,BlinkMacSystemFont,'SF Pro Text','Inter Variable','Inter',system-ui,'PingFang TC','PingFang SC','Microsoft JhengHei','Microsoft YaHei',sans-serif;" +
       "cursor:grab;box-shadow:0 4px 14px rgba(0,0,0,.18);touch-action:none;user-select:none;-webkit-user-select:none}" +
       ".btn:hover{border-color:var(--muted)}" +
       ".btn.drag{cursor:grabbing;box-shadow:0 8px 24px rgba(0,0,0,.28)}" +
@@ -49,7 +49,7 @@
       ".box{position:relative;width:min(960px,100%);height:min(86vh,900px);background:var(--bg);border-radius:12px;overflow:hidden;" +
       "box-shadow:0 10px 40px rgba(0,0,0,.35);display:flex;flex-direction:column}" +
       ".bar{display:flex;align-items:center;justify-content:space-between;padding:8px 8px 8px 14px;border-bottom:1px solid var(--line);" +
-      "color:var(--fg);font:600 14px system-ui,-apple-system,'PingFang TC','Microsoft JhengHei',sans-serif}" +
+      "color:var(--fg);font:600 14px -apple-system,BlinkMacSystemFont,'SF Pro Text','Inter Variable','Inter',system-ui,'PingFang TC','PingFang SC','Microsoft JhengHei','Microsoft YaHei',sans-serif}" +
       ".bar span:last-child{display:flex;align-items:center}" +
       ".bar a{color:var(--muted);font-weight:400;font-size:12px;text-decoration:none;margin-right:8px}" +
       ".x{border:0;background:transparent;color:var(--fg);font-size:22px;line-height:1;width:32px;height:32px;border-radius:6px;cursor:pointer}" +

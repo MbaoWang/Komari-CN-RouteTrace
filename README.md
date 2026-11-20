@@ -27,6 +27,9 @@ IPv4 / IPv6 的位址歸屬都使用 [bgp.tools](https://bgp.tools) 路由表的
    - `NTT 轉電信 CN2 GIA`、`Lumen 轉電信 163 → 境內轉聯通`
    - 機房直接接三網時沒有前綴，例如 `電信 CN2 GIA`、`直連國內移動`
    - 完整的國際段（例如 `Arelion (AS1299) → NTT (AS2914)`）在展開後的「國際段」顯示
+   - **國際業者只在承載長距離時才寫進標籤**：比較機房第一跳和第一個三網跳點的延遲，增加超過設定值（預設 50 ms）才寫。
+     例如 NTT 在美國當地就交給電信（只多 0.6 ms），標籤只寫「電信 163」；NTT 先帶到香港才交接（多 100 ms 以上），才寫「NTT 轉電信 163」。
+     每一跳取「這跳以及之後所有跳點的最低延遲」，避免個別路由器回應 ICMP 虛高造成誤判；交接點本身沒有回應時仍可能誤判
 3. **位址歸屬看 bgp.tools 前綴，不只看追蹤工具的 ASN**：
    - 例如 CMIN2 的 `223.119.8.0/21` 等段，工具常回報成 CMI（AS58453），會依前綴修正
    - `202.97.128.0/19` 在 BGP 上是聯通 AS4837 宣告的，不會再被當成電信 163
@@ -133,6 +136,11 @@ Komari 主機連不到 Telegram 時，可在「Telegram API 位址」填自建�
 - 9 個目標每 3 個一組並行，nexttrace 一輪約 1～3 分鐘；逾時可在設定中調整。
 - 線路判斷依 bgp.tools 前綴與 59.43.x / 202.97.x 等骨幹網段推斷，僅供參考。
 
+## 字體
+
+結果頁使用與 [Komari-Theme-LuminaPlus](https://github.com/shanyang242/Komari-Theme-LuminaPlus) 相同的字體設定：
+英數字為 [Inter](https://github.com/rsms/inter)（Inter Variable，隨插件打包在 `page/fonts/`，SIL Open Font License 1.1），中文使用系統字體（蘋方 / 微軟正黑體等）。
+
 ## 授權
 
 本專案以 [GNU General Public License v3.0 或更新版本](LICENSE)（GPL-3.0-or-later）釋出。
@@ -143,3 +151,4 @@ Komari 主機連不到 Telegram 時，可在「Telegram API 位址」填自建�
 - [oneclickvirt/backtrace](https://github.com/oneclickvirt/backtrace)（Apache-2.0）：線路判別規則、未宣告骨幹網段的備援表
   （`lib.js` 的 `PREFIX4_FALLBACK`、CMIN2 網段）與預設回程目標 IP 參考自此專案
 - [bgp.tools](https://bgp.tools)：`prefix4.js` / `prefix6.js` 由其公開路由表產生
+- [Inter](https://github.com/rsms/inter)（SIL OFL 1.1）：`page/fonts/inter-latin-wght-normal.woff2`，授權全文見 `page/fonts/Inter-OFL.txt`

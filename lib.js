@@ -430,13 +430,16 @@ function asLabel(asn, owner) {
 }
 
 // dst：目標 IP。目的地本身那一跳不算骨幹證據（例如廣州聯通 IPv6 目標在 AS9929 宣告的位址段內）
-function classify(hops, isp, dst) {
+// opts.transitRtt：國際業者承載的延遲超過這個毫秒數，才在標籤寫出國際業者（預設 50）
+function classify(hops, isp, dst, opts) {
+  opts = opts || {};
+  const transitRtt = Number.isFinite(Number(opts.transitRtt)) ? Number(opts.transitRtt) : 50;
   const pub = [];
   for (const h of hops) {
     if (!h.ip || isPrivateIP(h.ip)) continue;
     const pi = prefixInfo(h.ip);
     const asn = pi ? pi.asn : h.asn || 0;
-    pub.push({ ip: h.ip, asn, owner: h.owner || "", bb: pi ? pi.bb : "", fam: familyOf(asn, h.owner), v6: h.ip.includes(":"), dst: !!dst && sameIP(h.ip, dst) });
+    pub.push({ ip: h.ip, asn, owner: h.owner || "", bb: pi ? pi.bb : "", fam: familyOf(asn, h.owner), v6: h.ip.includes(":"), dst: !!dst && sameIP(h.ip, dst), rtt: typeof h.rtt === "number" ? h.rtt : null });
   }
   const isV6 = pub.length ? pub[pub.length - 1].v6 : false;
   const res = { label: "", line: "", carrier: "", cross: false, confidence: "", evidence: "", intl: [], intl_text: "" };
@@ -452,6 +455,23 @@ function classify(hops, isp, dst) {
   }
   res.intl = runs.slice(1).filter((r) => r.asn).map((r) => ({ asn: r.asn, name: AS_NAMES[r.asn] || r.owner || "" }));
   res.intl_text = res.intl.length ? res.intl.map((r) => asLabel(r.asn, r.name)).join(" → ") : entry === 0 ? "機房直接位於三網" : "機房直連三網";
+
+  // 交接延遲：機房第一跳 → 第一個三網跳點之間增加的延遲。
+  // 路由器回應 ICMP 常被降低優先而虛高，所以每一跳取「這跳以及之後所有跳點的最低延遲」。
+  const eff = new Array(pub.length).fill(null);
+  let low = null;
+  for (let i = pub.length - 1; i >= 0; i--) {
+    if (pub[i].rtt !== null && (low === null || pub[i].rtt < low)) low = pub[i].rtt;
+    eff[i] = low;
+  }
+  res.handoff_delta = entry > 0 && eff[0] !== null && eff[entry] !== null ? Math.round((eff[entry] - eff[0]) * 10) / 10 : null;
+  // 交接前延遲沒增加多少（例如 NTT 在美國當地就交給電信）→ 國際業者只是機房旁的一小段，不寫進標籤
+  res.transit_shown = res.intl.length > 0 && (res.handoff_delta === null || res.handoff_delta >= transitRtt);
+  if (res.intl.length && res.handoff_delta !== null) {
+    res.intl_text += res.transit_shown
+      ? `；交接前延遲增加 ${res.handoff_delta} ms（國際業者承載長距離）`
+      : `；交接前延遲只增加 ${res.handoff_delta} ms（機房附近就交給三網）`;
+  }
 
   if (entry < 0) {
     res.label = res.line = "未進入中國三網";
@@ -554,9 +574,9 @@ function classify(hops, isp, dst) {
   res.confidence = conf;
   res.evidence = ev;
   // 經國際業者交給三網時，標示是哪家國際業者交接的，例如「Lumen 轉國內移動」「NTT 轉電信 CN2 GIA」
-  const handover = res.intl.length ? res.intl[res.intl.length - 1] : null;
+  const handover = res.transit_shown ? res.intl[res.intl.length - 1] : null;
   res.handover = handover ? shortName(handover.asn, handover.name) : "";
-  let label = handover ? `${res.handover} 轉${line}` : line.startsWith("國內") ? "直連" + line : line;
+  let label = handover ? `${res.handover} 轉${line}` : line.startsWith("國內") && !res.intl.length ? "直連" + line : line;
   // 入境的電信商與目標不同：之後是境內轉網，不能算是走目標電信商的線路
   if (isp && F !== isp) {
     res.cross = true;

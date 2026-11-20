@@ -74,6 +74,7 @@ async function getCfg() {
     maskFirstAS: c.mask_first_as !== false,
     showIPs: c.show_hop_ips !== false,
     publicData: c.public_data !== false,
+    transitRtt: Number.isFinite(Number(c.transit_rtt)) && c.transit_rtt !== "" ? Math.max(0, Number(c.transit_rtt)) : 50,
     floatButton: c.float_button !== false,
     floatPosition: c.float_position === "left" ? "left" : "right",
     maxHops: Math.min(64, Math.max(8, Number(c.max_hops) || 30)),
@@ -121,7 +122,7 @@ function buildNodeResult(client, cfg, output, exitCode, targets) {
     if (!b || b.note) { node.targets.push({ label: t.label, v, isp: t.isp, ip: t.ip, error: b ? b.note : "沒有結果", segments: [], tags: [] }); continue; }
     const src = v === 6 ? client.ipv6 : client.ipv4;
     const comp = lib.compressPath(b.hops, { maskMode: cfg.maskMode, maskFirstAS: cfg.maskFirstAS, srcIP: src });
-    const cls = lib.classify(b.hops, t.isp, t.ip);
+    const cls = lib.classify(b.hops, t.isp, t.ip, { transitRtt: cfg.transitRtt });
     if (!cfg.showIPs) for (const s of comp.segments) s.ips = [];
     const reached = b.hops.some((h) => h.ip === t.ip);
     node.targets.push({
@@ -133,7 +134,7 @@ function buildNodeResult(client, cfg, output, exitCode, targets) {
       hop_count: b.hops.length,
       last_rtt: comp.last_rtt,
       tags: cls.tags,
-      route: { line: cls.line, carrier: cls.carrier, cross: cls.cross, confidence: cls.confidence, evidence: cls.evidence, intl: cls.intl, intl_text: cls.intl_text },
+      route: { line: cls.line, carrier: cls.carrier, cross: cls.cross, confidence: cls.confidence, evidence: cls.evidence, intl: cls.intl, intl_text: cls.intl_text, handoff_delta: cls.handoff_delta, transit_shown: cls.transit_shown },
       as_path: comp.segments.filter((s) => s.key !== "LAN").map((s) => s.key).join(" → "),
       segments: comp.segments,
     });
