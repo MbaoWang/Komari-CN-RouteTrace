@@ -395,23 +395,70 @@ function stop() {
 }
 
 // 自動檢測後若主要線路改變，推播給所有允許的 chat
+// 推播用的「線路摘要」：國內段只分辨到電信商，骨幹 / 省網的差異（例如 4134(163) 與 電信省網、
+// 4837(169) 與 聯通省網、9808 與 移動省網）多半只是某一跳這次有沒有回應，不算線路變更。
+// 有意義的部分：交接業者、接入方式、入境網路（CN2 GIA / GT、CTGNet、9929、10099、CMIN2、CMI）、途中轉給哪家。
+const GENERIC_NET = { "4134(163)": "電信", "4134": "電信", "電信省網": "電信", "4837(169)": "聯通", "4837": "聯通", "聯通省網": "聯通", "9808": "移動", "移動省網": "移動" };
+const NET_FAMILY = { CTGNet: "電信", "CN2 GIA": "電信", "CN2 GT": "電信", CN2: "電信", "9929": "聯通", "10099": "聯通", CMIN2: "移動", CMI: "移動" };
+function routeSummary(t) {
+  const r = t.route;
+  if (!r || !r.chip) return null; // 舊格式的結果不比較，避免插件更新後誤報
+  const withTransit = r.connect === "long_haul" || r.connect === "local_transit";
+  const nets = (r.chain || []).slice(withTransit ? 1 : 0);
+  const classes = [];
+  for (const n of nets) {
+    const generic = GENERIC_NET[n];
+    const fam = generic || NET_FAMILY[n] || n;
+    const prev = classes[classes.length - 1];
+    // 同一家：精品網之後接自家骨幹 / 省網、或連續的一般網路，都只算一段
+    if (prev && prev.fam === fam && (generic || prev.name === n)) continue;
+    classes.push({ fam, name: generic ? { 電信: "電信 163", 聯通: "聯通 4837", 移動: "移動 9808" }[fam] : n });
+  }
+  return {
+    transit: r.handover || "",
+    connect: r.connect || "",
+    entry: classes.length ? classes[0].name : "",
+    carriers: classes.map((c) => c.fam).join("→"),
+    key: [r.connect, r.handover || "", classes.map((c) => c.name).join("→")].join("|"),
+  };
+}
+
+function describeChange(a, b) {
+  const parts = [];
+  if (a.transit !== b.transit) parts.push(`交接業者：${a.transit || "無（直連）"} → ${b.transit || "無（直連）"}`);
+  if (a.connect !== b.connect) {
+    const name = { direct: "直連", overseas_transit: "海外交接", local_transit: "當地交接", long_haul: "長途承載" };
+    parts.push(`接入方式：${name[a.connect] || a.connect} → ${name[b.connect] || b.connect}`);
+  }
+  if (a.entry !== b.entry) parts.push(`入境網路：${a.entry} → ${b.entry}`);
+  else if (a.carriers !== b.carriers) parts.push(`途經電信商：${a.carriers} → ${b.carriers}`);
+  return parts;
+}
+
 async function notifyChange(prev, node) {
   if (!deps || !prev || !prev.targets || !prev.targets.length) return;
   const cfg = await deps.getCfg();
   if (!cfg.tgToken || !cfg.tgNotify || !cfg.tgChats.length) return;
-  const before = {};
   const key = (t) => t.label + "|" + (t.v || 4);
-  // 只比較同一種標籤格式（有 route.chip 的結果）；插件更新後第一次檢測不會因為寫法改變而誤報
-  const lineOf = (t) => (t.route && t.route.chip ? t.route.chip + " · " + (t.route.access || "") : null);
-  for (const t of prev.targets) before[key(t)] = lineOf(t);
-  const changes = [];
+  const before = {};
+  for (const t of prev.targets) before[key(t)] = t;
+  const blocks = [];
   for (const t of node.targets || []) {
-    const a = before[key(t)];
-    const b = lineOf(t);
-    if (a && b && a !== b) changes.push(`${ISP_ICON[t.isp] || "⚪️"} ${esc(t.label)}${t.v === 6 ? " (IPv6)" : ""}：${esc(a)} → <b>${esc(b)}</b>`);
+    const old = before[key(t)];
+    if (!old) continue;
+    const a = routeSummary(old);
+    const b = routeSummary(t);
+    if (!a || !b || a.key === b.key) continue;
+    const lineOf = (x) => `${x.route.chip}（${x.route.access}）`;
+    blocks.push([
+      `${ISP_ICON[t.isp] || "⚪️"} <b>${esc(t.label)}${t.v === 6 ? " (IPv6)" : ""}</b>`,
+      ...describeChange(a, b).map((x) => `　• ${esc(x)}`),
+      `　原本：${esc(lineOf(old))}`,
+      `　現在：<b>${esc(lineOf(t))}</b>`,
+    ].join("\n"));
   }
-  if (!changes.length) return;
-  const text = `⚠️ <b>${esc(node.name)}</b> 回程線路變更\n\n${changes.join("\n")}`;
+  if (!blocks.length) return;
+  const text = `⚠️ <b>${esc(node.name)}</b> 回程線路變更\n\n${blocks.join("\n\n")}`;
   for (const chat of cfg.tgChats) {
     try { await send(cfg, chat, text, nodeButtons(node)); } catch (e) { deps.log("推播失敗", chat, e.message || String(e)); }
   }
