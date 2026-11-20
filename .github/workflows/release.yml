@@ -1,10 +1,15 @@
-# 推送 v* 標籤時自動打包插件並發布 Release
+# main 上 komari-plugin.json 的 version 還沒發布過時，自動打包插件並建立 v<version> 標籤與 Release。
+# 發新版：修改 komari-plugin.json 的 version 後推到 main（發布說明可放在 .github/release-notes/v<version>.md）。
 name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main]
+    paths:
+      - komari-plugin.json
+      - .github/workflows/release.yml
+      - .github/release-notes/**
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -15,27 +20,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check manifest version matches tag
+      - name: Read version
+        id: ver
+        run: echo "tag=v$(jq -r .version komari-plugin.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether this version is already released
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          want="${GITHUB_REF_NAME#v}"
-          have="$(jq -r .version komari-plugin.json)"
-          if [ "$want" != "$have" ]; then
-            echo "::error::標籤 $GITHUB_REF_NAME 與 komari-plugin.json 的 version ($have) 不一致"
-            exit 1
+          if gh release view "${{ steps.ver.outputs.tag }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "${{ steps.ver.outputs.tag }} 已發布，略過"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build plugin zip
+        if: steps.check.outputs.exists == 'false'
         run: |
           zip -r komari-cnroute.zip komari-plugin.json script.js lib.js prefix4.js prefix6.js \
             telegram.js float.js probe.sh page README.md LICENSE
 
       - name: Create release
+        if: steps.check.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.ver.outputs.tag }}
         run: |
-          notes=".github/release-notes/${GITHUB_REF_NAME}.md"
+          notes=".github/release-notes/${TAG}.md"
           if [ -f "$notes" ]; then
-            gh release create "$GITHUB_REF_NAME" komari-cnroute.zip --title "$GITHUB_REF_NAME" --notes-file "$notes"
+            gh release create "$TAG" komari-cnroute.zip --target "$GITHUB_SHA" --title "$TAG" --notes-file "$notes"
           else
-            gh release create "$GITHUB_REF_NAME" komari-cnroute.zip --title "$GITHUB_REF_NAME" --generate-notes
+            gh release create "$TAG" komari-cnroute.zip --target "$GITHUB_SHA" --title "$TAG" --generate-notes
           fi

@@ -72,8 +72,8 @@ ICMP 追蹤結果可能和實際 TCP 流量走法不同，結果僅供參考。
    - `allowHTMLInject`：在首頁顯示浮動按鈕
 4. 在插件設定中選擇 IPv4 / IPv6 要檢測的伺服器、目標與間隔。
 
-發布新版：更新 `komari-plugin.json` 的 `version`，推送同名標籤（例如 `v1.0.1`），GitHub Actions 會自動打包並發布 Release；
-發布說明可放在 `.github/release-notes/<標籤>.md`。
+發布新版：把 `komari-plugin.json` 的 `version` 改成新版本號（例如 `1.0.1`）推到 main，
+GitHub Actions 會自動打包並建立 `v1.0.1` 標籤與 Release；發布說明可放在 `.github/release-notes/v1.0.1.md`。
 
 自行打包：在 repository 根目錄執行
 
