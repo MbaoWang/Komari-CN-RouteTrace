@@ -139,12 +139,16 @@ const tagText = (t) => ((t.tags || [])[0] || "") + (t.route ? CONF[t.route.confi
 const cellMain = (t) => {
   const r = t.route || {};
   if (!r.short) return tagText(t); // 舊版結果
-  return (r.cross_text ? r.carrier_name + " " : "") + r.short;
+  // 經國際業者回來時，第一行也寫出交接：「Cogent → 163」
+  const via = r.connect && r.connect !== "direct" && r.chain && r.chain.length ? r.chain[0] + " → " : "";
+  return via + (r.cross_text ? r.carrier_name + " " : "") + r.short;
 };
 // 格子第二行：經過的網路（只有一段時不顯示）
 const cellChain = (t) => {
   const r = t.route || {};
-  return r.chain && r.chain.length > 1 ? r.chain_text : "";
+  // 第一行已含國際業者與入境網路，路徑比這多（例如之後轉網）才顯示
+  const shown = r.connect && r.connect !== "direct" ? 2 : 1;
+  return r.chain && r.chain.length > shown ? r.chain_text : "";
 };
 // 格子小字：接入方式 · 延遲 · 推測 / 未到達
 const cellMeta = (t) => {
