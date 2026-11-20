@@ -46,8 +46,8 @@
       "<style>" +
       ":host{all:initial}" +
       ".btn{display:flex;align-items:center;justify-content:center;width:48px;height:48px;padding:0;margin:0;" +
-      "border-radius:12px;border:1px solid var(--btn-line);background:var(--btn-bg);color:var(--btn-fg);" +
-      "cursor:grab;box-shadow:4px 6px 18px rgba(0,0,0,.18),1px 2px 4px rgba(0,0,0,.12);" +
+      "border-radius:var(--btn-radius,12px);border:1px solid var(--btn-line);background:var(--btn-bg);color:var(--btn-fg);" +
+      "cursor:grab;box-shadow:var(--btn-shadow,4px 6px 18px rgba(0,0,0,.18),1px 2px 4px rgba(0,0,0,.12));" +
       "touch-action:none;user-select:none;-webkit-user-select:none;transition:border-color .25s,box-shadow .25s,transform .15s}" +
       ".btn:hover{transform:translate(-1px,-1px) scale(1.04);box-shadow:6px 10px 24px rgba(0,0,0,.24),2px 3px 6px rgba(0,0,0,.14)}" +
       ".btn:focus-visible{outline:2px solid var(--btn-fg);outline-offset:2px}" +
@@ -58,7 +58,7 @@
       ".box{position:relative;width:min(960px,100%);height:min(86vh,900px);background:var(--bg);border-radius:12px;overflow:hidden;" +
       "box-shadow:0 10px 40px rgba(0,0,0,.35);display:flex;flex-direction:column}" +
       ".bar{display:flex;align-items:center;justify-content:space-between;padding:8px 8px 8px 14px;border-bottom:1px solid var(--line);" +
-      "color:var(--fg);font:600 14px -apple-system,BlinkMacSystemFont,'SF Pro Text','Inter Variable','Inter',system-ui,'PingFang TC','PingFang SC','Microsoft JhengHei','Microsoft YaHei',sans-serif}" +
+      "color:var(--fg);font:600 14px -apple-system,BlinkMacSystemFont,'SF Pro Text','Inter Variable','Inter',system-ui,'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif}" +
       ".bar span:last-child{display:flex;align-items:center}" +
       ".bar a{color:var(--muted);font-weight:400;font-size:12px;text-decoration:none;margin-right:8px}" +
       ".x{border:0;background:transparent;color:var(--fg);font-size:22px;line-height:1;width:32px;height:32px;border-radius:6px;cursor:pointer}" +
@@ -81,6 +81,29 @@
         ? "--bg:#171a21;--fg:#e5e7eb;--muted:#9ca3af;--line:#2a2f3a;--btn-bg:#1e293b;--btn-fg:#f8fafc;--btn-line:rgba(255,255,255,.12)"
         : "--bg:#ffffff;--fg:#1d2129;--muted:#6b7280;--line:#e5e7eb;--btn-bg:#ffffff;--btn-fg:#111827;--btn-line:rgba(15,23,42,.10)";
       host.dataset.vars = vars;
+      syncLook();
+    }
+    // 外觀與 Komari-Plugin-UnlockTest 的浮動按鈕一致：
+    //   頁面上有它的按鈕 → 直接沿用它實際的圓角、底色、邊框、陰影、圖示顏色；
+    //   沒有 → 與它相同的規則：讀主題伺服器卡片的圓角（夾在 6～20px，預設 12px）
+    function syncLook() {
+      var look = "";
+      try {
+        var ut = document.querySelector("#km-ul-min-icon, .km-ul-trigger-btn, [data-km-fab='true']");
+        if (ut && !host.contains(ut)) {
+          var cs = window.getComputedStyle(ut);
+          if (cs.borderTopLeftRadius) look += "--btn-radius:" + cs.borderTopLeftRadius + ";";
+          if (cs.backgroundColor && cs.backgroundColor !== "rgba(0, 0, 0, 0)") look += "--btn-bg:" + cs.backgroundColor + ";";
+          if (cs.borderTopColor) look += "--btn-line:" + cs.borderTopColor + ";";
+          if (cs.boxShadow && cs.boxShadow !== "none") look += "--btn-shadow:" + cs.boxShadow + ";";
+          if (cs.color) look += "--btn-fg:" + cs.color + ";";
+        } else {
+          var card = document.querySelector(".node-card, .km-node-card, .km-instance-server-item, [data-node-uuid], [data-uuid], article");
+          var r = card ? parseFloat(window.getComputedStyle(card).borderTopLeftRadius) : NaN;
+          look += "--btn-radius:" + Math.max(6, Math.min(20, r || 12)) + "px;";
+        }
+      } catch (e) {}
+      host.dataset.look = look;
       applyStyle();
     }
     // 位置：預設在右下 / 左下；拖曳後改用 left/top，記在這個瀏覽器（localStorage）
@@ -123,6 +146,7 @@
       return bottom;
     }
     function restack() {
+      syncLook();
       if (pos) return; // 使用者拖曳過就以拖曳位置為準
       var b = findStack();
       if (b !== stackBottom) { stackBottom = b; applyStyle(); }
@@ -130,7 +154,7 @@
     function applyStyle() {
       var css = "position:fixed;z-index:2147483000;bottom:" + stackBottom + "px;" + side + ":" + EDGE + "px;";
       if (pos) { var c = clamp(pos); css = "position:fixed;z-index:2147483000;left:" + c.x + "px;top:" + c.y + "px;"; }
-      host.style.cssText = css + (host.dataset.vars || "");
+      host.style.cssText = css + (host.dataset.vars || "") + ";" + (host.dataset.look || "");
     }
     window.addEventListener("resize", function () { applyStyle(); restack(); });
     // 其他插件的按鈕可能比較晚出現：載入後重新偵測幾次，並監看 body 新增的元素

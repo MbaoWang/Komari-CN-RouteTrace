@@ -16,10 +16,18 @@
     unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
   }
   :root {
-    --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter Variable", "Inter", system-ui,
-      "PingFang TC", "PingFang SC", "Hiragino Sans GB", "Microsoft JhengHei", "Microsoft YaHei", sans-serif;
+    /* 與 LuminaPlus 完全相同的字體順序（Windows 上中文為微軟雅黑） */
+    --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter Variable", "Inter",
+      system-ui, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
     --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace;
     --font-numeric: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+    /* LuminaPlus 的文字渲染設定 */
+    font-family: var(--font-sans);
+    font-synthesis: none;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    letter-spacing: -0.003em;
   }
   :root {
     --bg: #f6f7f9; --card: #ffffff; --fg: #1d2129; --muted: #6b7280; --line: #e5e7eb;
@@ -30,7 +38,7 @@
       --accent: #60a5fa; --ct: #60a5fa; --cu: #f87171; --cm: #34d399; --warn: #fbbf24; --chip: #1e2533; }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 var(--font-sans); }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-size: 14px; line-height: 1.5; font-family: var(--font-sans); }
   header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; padding: 16px; }
   h1 { font-size: 18px; margin: 0; }
   .sub { color: var(--muted); font-size: 12px; }
@@ -115,6 +123,41 @@
 </header>
 <main id="list"></main>
 <script>
+// 在 Komari 的彈出視窗裡時（同網域），沿用面板主題實際的字體與 @font-face，換主題也會一致
+(function inheritThemeFont() {
+  try {
+    if (window.parent === window) return;
+    const pd = window.parent.document;
+    const pcs = window.parent.getComputedStyle(pd.body);
+    const root = document.documentElement.style;
+    if (pcs.fontFamily) root.setProperty("--font-sans", pcs.fontFamily);
+    for (const k of ["letterSpacing", "webkitFontSmoothing", "textRendering", "fontSynthesis"]) {
+      if (pcs[k]) document.documentElement.style[k] = pcs[k];
+    }
+    const code = pd.querySelector("code, pre, kbd, samp");
+    if (code) root.setProperty("--font-mono", window.parent.getComputedStyle(code).fontFamily);
+    // 複製字型檔宣告（相對網址改成絕對網址）
+    const rules = [];
+    for (const sheet of pd.styleSheets) {
+      let list;
+      try { list = sheet.cssRules; } catch (_) { continue; } // 跨網域樣式表讀不到
+      if (!list) continue;
+      const base = sheet.href || window.parent.location.href;
+      for (const r of list) {
+        if (r.type !== 5) continue; // CSSRule.FONT_FACE_RULE
+        rules.push(r.cssText.replace(/url\((['"]?)([^'")]+)\1\)/g, (m, q, u) => {
+          try { return "url(" + q + new URL(u, base).href + q + ")"; } catch (_) { return m; }
+        }));
+      }
+    }
+    if (rules.length) {
+      const st = document.createElement("style");
+      st.textContent = rules.join("\n");
+      document.head.appendChild(st);
+    }
+  } catch (_) { /* 不在同網域或無法讀取時，使用上面的 LuminaPlus 字體設定 */ }
+})();
+
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const ago = (iso) => {
   if (!iso) return "尚未檢測";

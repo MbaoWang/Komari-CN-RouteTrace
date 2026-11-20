@@ -139,6 +139,7 @@ zip -r komari-cnroute.zip komari-plugin.json script.js lib.js prefix4.js prefix6
 - **浮動按鈕**：插件設定開啟「在 Komari 首頁顯示浮動按鈕」（預設開），前台右下角（可改左下角）會出現 48px 方形圖示按鈕
   （白底黑色線條圖示，深色主題自動反轉，風格與 [Komari-Plugin-UnlockTest](https://github.com/livingfree2023/Komari-Plugin-UnlockTest) 一致），
   點擊後以彈出視窗顯示結果。同一個角落已有其他插件的浮動按鈕（例如 UnlockTest）時，會對齊同一欄、自動排在它上方。
+  外觀與 UnlockTest 一致：頁面上有它的按鈕時直接沿用它的圓角、底色、邊框與陰影；沒有時依主題伺服器卡片的圓角決定（與 UnlockTest 相同規則）。
   按鈕可以拖曳移動，位置會記在各自的瀏覽器。彈出視窗是唯讀的，不提供檢測按鈕；後台、終端機頁面不會出現按鈕
 - 需要同時開啟「訪客可查看結果」，訪客才看得到按鈕；關閉時只有登入的管理員看得到
 - IPv4 / IPv6 分頁只會列出有被選入該版本檢測的伺服器
@@ -178,8 +179,9 @@ Komari 主機連不到 Telegram 時，可在「Telegram API 位址」填自建�
 
 ## 字體
 
-結果頁使用與 [Komari-Theme-LuminaPlus](https://github.com/shanyang242/Komari-Theme-LuminaPlus) 相同的字體設定：
-英數字為 [Inter](https://github.com/rsms/inter)（Inter Variable，隨插件打包在 `page/fonts/`，SIL Open Font License 1.1），中文使用系統字體（蘋方 / 微軟正黑體等）。
+- 從首頁浮動按鈕打開時，結果頁直接沿用 Komari 面板主題實際使用的字體與字型檔，換主題也會一致
+- 直接開結果頁網址時，使用與 [Komari-Theme-LuminaPlus](https://github.com/shanyang242/Komari-Theme-LuminaPlus) 完全相同的字體順序與文字渲染設定：
+  英數字為 [Inter](https://github.com/rsms/inter)（Inter Variable，隨插件打包在 `page/fonts/`，SIL Open Font License 1.1），中文依序為蘋方 / 冬青黑體 / 微軟雅黑
 
 ## 授權
 
