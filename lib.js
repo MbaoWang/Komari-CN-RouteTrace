@@ -481,7 +481,7 @@ function classify(hops, isp, dst, opts) {
     if (!h.ip || isPrivateIP(h.ip)) continue;
     const pi = prefixInfo(h.ip);
     const asn = pi ? pi.asn : h.asn || 0;
-    pub.push({ ip: h.ip, asn, owner: h.owner || "", bb: pi ? pi.bb : "", fam: familyOf(asn, h.owner), v6: h.ip.includes(":"), dst: !!dst && sameIP(h.ip, dst), rtt: typeof h.rtt === "number" ? h.rtt : null, idx: hi });
+    pub.push({ ip: h.ip, asn, owner: h.owner || "", bb: pi ? pi.bb : "", fam: familyOf(asn, h.owner), v6: h.ip.includes(":"), dst: !!dst && sameIP(h.ip, dst), rtt: typeof h.rtt === "number" ? h.rtt : null, idx: hi, geo: h.geo || "" });
   }
   const isV6 = pub.length ? pub[pub.length - 1].v6 : false;
   const res = { label: "", line: "", carrier: "", cross: false, confidence: "", evidence: "", intl: [], intl_text: "" };
@@ -509,6 +509,20 @@ function classify(hops, isp, dst, opts) {
   res.handoff_delta = entry > 0 && eff[0] !== null && eff[entry] !== null ? Math.round((eff[entry] - eff[0]) * 10) / 10 : null;
   // 交接前延遲沒增加多少（例如 NTT 在美國當地就交給電信）→ 國際業者只是機房旁的一小段，不寫進標籤
   res.transit_shown = res.intl.length > 0 && (res.handoff_delta === null || res.handoff_delta >= transitRtt);
+  const inChina = (g) => /中国|中國|香港|澳门|澳門|China|Hong ?Kong|Macau/i.test(g || "");
+  if (entry >= 0) {
+    for (let k = entry; k < pub.length; k++) {
+      const h = pub[k];
+      if (!h.fam || h.dst) break;
+      const foreign = h.geo ? !inChina(h.geo) : eff[k] !== null && eff[0] !== null && eff[k] - eff[0] < transitRtt;
+      if (!foreign) break;
+      if (!h.bb) h.bb = { 4134: "163", 4837: "169", 9808: "cmnet" }[h.asn] || "";
+      h.overseas = true;
+    }
+  }
+  // 交接地點：有地理位置時看交接點在不在中國 / 香港
+  const handHop = entry > 0 ? pub[entry] : null;
+  res.handoff_overseas = !!(handHop && (handHop.overseas || (handHop.geo && !inChina(handHop.geo))));
   if (res.intl.length && res.handoff_delta !== null) {
     res.intl_text += res.transit_shown
       ? `；交接前延遲增加 ${res.handoff_delta} ms（國際業者承載長距離）`
@@ -572,7 +586,10 @@ function classify(hops, isp, dst, opts) {
       line = "電信 CTGNet";
       ev = "經過電信國際網 CTGNet（AS23764" + (isV6 ? "，2400:9380:axxx" : "") + "）" + (b163 > 0 ? "，入境後接 163 骨幹" : "") + "，未經 CN2";
     } else if (b163 > 0) {
-      line = "電信 163"; ev = isV6 ? "IPv6：經過 163 骨幹（240e:0:: / 2400:9380:8xxx）" : "經過 202.97（163 骨幹）";
+      line = "電信 163";
+      const only163Overseas = core.filter(bbIs("163")).every((h) => h.overseas);
+      ev = only163Overseas ? "在海外交給電信 163 的海外節點（AS4134，例如 218.30.x），國內段沒有看到 CN2"
+        : isV6 ? "IPv6：經過 163 骨幹（240e:0:: / 2400:9380:8xxx）" : "經過 202.97（163 骨幹）";
     } else if (isV6 && cnt(asnIs(4134)) >= 2) {
       line = "電信 163"; conf = "推測"; ev = "IPv6：多跳 AS4134，無 CN2";
     } else {
@@ -623,21 +640,16 @@ function classify(hops, isp, dst, opts) {
   //   short   骨幹名稱：CN2 GIA / CN2 GT / 163 / CTGNet / 9929 / CUG / 4837 / CMIN2 / CMI / CMNET / 省網直入
   //   access  接入方式：直連 / 經 Lumen（在當地交接）/ NTT 長途承載（國際業者先帶一大段才交接）
   //   cross   入境的電信商與目標不同時：轉聯通 … （之後是境內轉網）
-  res.short = line.startsWith("國內") ? "省網直入" : line.replace(/^(電信|聯通|移動) /, "");
+  res.short = line.startsWith("國內") ? FAMILY_NAME[F] + "省網" : line.replace(/^(電信|聯通|移動) /, "");
   res.carrier_name = FAMILY_NAME[F];
   const last = res.intl.length ? res.intl[res.intl.length - 1] : null;
   res.handover = last ? shortName(last.asn, last.name) : "";
-  // 接入方式：直連（機房直接接三網）/ 本地交接（國際業者在當地交給三網）/ 長途承載（國際業者先帶一大段才交接）
-  if (!last) { res.connect = "direct"; res.access = "直連"; }
-  else if (res.transit_shown) { res.connect = "long_haul"; res.access = "長途承載"; }
-  else { res.connect = "local_transit"; res.access = "本地交接"; }
 
-  // 路徑：依序寫出交接的國際業者與經過的三網網路，轉網時標出新的電信商，例如
-  //   「電信 CTGNet → 163 → 移動 CMNET」「Cogent → 電信 163」「電信 CN2 → 163」
+  // 網路名稱：ASN 加骨幹名稱，例如 4134(163)、4837(169)、9808、10099、9929、CMIN2、CMI、CTGNet、CN2 GIA
   const netName = (h) => {
-    if (h.fam === "ct") return h.asn === 23764 ? "CTGNet" : h.asn === 4809 ? "CN2" : h.bb === "163" ? "163" : "省網";
-    if (h.fam === "cu") return h.asn === 9929 ? "9929" : h.asn === 10099 ? "CUG" : h.bb === "169" ? "4837" : "省網";
-    if (h.fam === "cm") return h.asn === 58807 ? "CMIN2" : h.asn === 58453 ? "CMI" : h.bb === "cmnet" ? "CMNET" : "省網";
+    if (h.fam === "ct") return h.asn === 23764 ? "CTGNet" : h.asn === 4809 ? "CN2" : h.bb === "163" ? "4134(163)" : "電信省網";
+    if (h.fam === "cu") return h.asn === 9929 ? "9929" : h.asn === 10099 ? "10099" : h.bb === "169" ? "4837(169)" : "聯通省網";
+    if (h.fam === "cm") return h.asn === 58807 ? "CMIN2" : h.asn === 58453 ? "CMI" : h.bb === "cmnet" ? "9808" : "移動省網";
     return null;
   };
   const tail = pub.slice(entry);
@@ -648,25 +660,40 @@ function classify(hops, isp, dst, opts) {
   for (let k = 0; k < tail.length; k++) {
     const h = tail[k];
     let name = netName(h);
-    if (name === "省網" && lastBB[h.fam] !== undefined && k < lastBB[h.fam]) {
-      if (h.asn === 4134) name = "163";
-      else if (h.asn === 4837) name = "4837";
-    }
     if (!name) continue;
+    // 骨幹之前的 AS4134 / AS4837 / AS9808 也是骨幹（例如海外節點），之後的才是交給省網
+    if (/省網$/.test(name) && lastBB[h.fam] !== undefined && k < lastBB[h.fam]) {
+      name = { 4134: "4134(163)", 4837: "4837(169)", 9808: "9808" }[h.asn] || name;
+    }
+    if (name === "CN2" && /^CN2/.test(res.short)) name = res.short; // CN2 GIA / CN2 GT
     const prev = items[items.length - 1];
-    if (prev && prev.fam === h.fam && prev.name === name) continue;
+    if (prev && prev.name === name) continue;
     items.push({ fam: h.fam, name });
   }
   // 同一家的骨幹之後交給自家省網是正常的收尾，不寫出來
-  while (items.length > 1 && items[items.length - 1].name === "省網" && items[items.length - 2].fam === items[items.length - 1].fam &&
-    items[items.length - 2].name !== "省網") items.pop();
-  res.chain = (last ? [res.handover] : []).concat(items.map((it, k) => {
-    const newCarrier = k === 0 || items[k - 1].fam !== it.fam;
-    if (it.name === "省網") return FAMILY_NAME[it.fam] + "省網";
-    return newCarrier ? FAMILY_NAME[it.fam] + " " + it.name : it.name;
-  }));
+  while (items.length > 1 && /省網$/.test(items[items.length - 1].name) && items[items.length - 2].fam === items[items.length - 1].fam &&
+    !/省網$/.test(items[items.length - 2].name)) items.pop();
+  const netsFull = items.map((it) => it.name);
+  // 第一行：移動的國際網（CMI / CMIN2）入境後一定接 9808，目標也是移動時省略最後的 9808
+  const nets = netsFull.slice();
+  if (nets.length >= 2 && nets[nets.length - 1] === "9808" && /^CMI/.test(nets[nets.length - 2])) nets.pop();
+
+  // 交接寫法：
+  //   直連：機房直接接三網                              → 只寫網路，例如「CN2 GIA」「CTGNet → 4134(163) → 4837(169)」
+  //   海外交接：國際業者在海外就交給三網（例如 NTT 在聖荷西交給 163 的海外節點）→ 只寫網路「4134(163)」，業者寫在小字
+  //   香港 / 國內交接、或國際業者長途承載            → 寫交接「Lumen → CMI」「Verizon → 4837(169)」
+  let showTransit = false;
+  if (!last) { res.connect = "direct"; res.access = "直連"; }
+  else if (res.transit_shown) { res.connect = "long_haul"; res.access = "長途承載"; showTransit = true; }
+  else if (!res.handoff_overseas && (handHop && (handHop.geo || pub[entry - 1].geo))) {
+    res.connect = "local_transit"; res.access = "當地交接"; showTransit = true;
+  } else { res.connect = "overseas_transit"; res.access = `經 ${res.handover} 海外交接`; }
+
+  res.chip = (showTransit ? [res.handover] : []).concat(nets).join(" → ");
+  res.chain = (showTransit ? [res.handover] : []).concat(nets);
   res.chain_text = res.chain.join(" → ");
-  res.chain_full = res.intl.map((r) => shortName(r.asn, r.name)).concat(res.chain.slice(last ? 1 : 0));
+  // 完整走法：所有國際業者 + 經過的網路
+  res.chain_full = res.intl.map((r) => shortName(r.asn, r.name)).concat(netsFull);
   res.chain_full_text = res.chain_full.join(" → ");
 
   if (isp && F !== isp) {
@@ -674,10 +701,7 @@ function classify(hops, isp, dst, opts) {
     res.cross_text = `轉${FAMILY_NAME[isp]}`;
     res.evidence += `；${FAMILY_NAME[F]}入境後${handoff ? "" : "在目的地附近"}才交給${FAMILY_NAME[isp]}`;
   }
-  // 完整標籤（Telegram / 推播用）：有多段路徑就寫路徑，線路名稱不在路徑裡時（例如 CN2 GIA / GT）補在括號
-  const head = res.chain.length > 1 ? res.chain_text : `${res.carrier_name} ${res.short}`;
-  const inChain = res.chain.some((c) => c === res.short || c.endsWith(" " + res.short) || c.endsWith(res.short));
-  res.label = head + (res.chain.length > 1 && !inChain ? `（${res.short}）` : "") + " · " + res.access;
+  res.label = res.chip + " · " + res.access;
   return withTags(res);
 }
 

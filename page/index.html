@@ -135,20 +135,17 @@ let ver = 4;
 try { ver = Number(localStorage.getItem("cnroute-ver")) === 6 ? 6 : 4; } catch (_) {}
 const CONF = { 確認: "", 推測: "（推測）", 不足: "（證據不足）" };
 const tagText = (t) => ((t.tags || [])[0] || "") + (t.route ? CONF[t.route.confidence] || "" : "");
-// 格子大字：骨幹名稱（欄位已代表電信商；入境電信商不同時才加上電信商名稱）
+// 格子第一行：怎麼交接進中國（例如 4134(163)、Lumen → CMI、CTGNet → 4134(163) → 4837(169)）
 const cellMain = (t) => {
   const r = t.route || {};
-  if (!r.short) return tagText(t); // 舊版結果
-  // 經國際業者回來時，第一行也寫出交接：「Cogent → 163」
-  const via = r.connect && r.connect !== "direct" && r.chain && r.chain.length ? r.chain[0] + " → " : "";
-  return via + (r.cross_text ? r.carrier_name + " " : "") + r.short;
+  if (r.chip) return r.chip;
+  return r.short ? (r.cross_text ? r.carrier_name + " " : "") + r.short : tagText(t); // 舊版結果
 };
-// 格子第二行：完整走法（所有國際業者 + 三網網路）；和第一行一樣時不顯示
+// 格子第二行：完整走法（所有國際業者 + 經過的網路）；和第一行一樣時不顯示
 const cellChain = (t) => {
   const r = t.route || {};
-  const full = r.chain_full && r.chain_full.length ? r.chain_full : r.chain || [];
-  const shown = r.connect && r.connect !== "direct" ? 2 : 1;
-  return full.length > shown ? full.join(" → ") : "";
+  const full = r.chain_full_text || "";
+  return full && full !== cellMain(t) ? full : "";
 };
 // 格子小字：接入方式 · 延遲 · 推測 / 未到達
 const cellMeta = (t) => {

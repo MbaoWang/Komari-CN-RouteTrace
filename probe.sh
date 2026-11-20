@@ -124,23 +124,23 @@ run_one() {
       nexttrace)
         if have python3; then
           echo "##BEGIN $id $ip lines"
-          nexttrace $nt_tcp -j -q 1 -m "$MAXHOP" "$ip" 2>/dev/null | python3 -c "$NT_COMPACT"
+          nexttrace $nt_tcp -j -q 3 -m "$MAXHOP" "$ip" 2>/dev/null | python3 -c "$NT_COMPACT"
         else
           echo "##BEGIN $id $ip ntjson"
-          nexttrace $nt_tcp -j -q 1 -m "$MAXHOP" "$ip" 2>/dev/null
+          nexttrace $nt_tcp -j -q 3 -m "$MAXHOP" "$ip" 2>/dev/null
         fi ;;
       mtr)
         if mtr --help 2>&1 | grep -q -- '--json'; then
           echo "##BEGIN $id $ip mtrjson"
-          mtr $fam $mtr_tcp -z -n -j -c 2 -m "$MAXHOP" "$ip" 2>/dev/null
+          mtr $fam $mtr_tcp -z -n -j -c 3 -m "$MAXHOP" "$ip" 2>/dev/null
         else
           echo "##BEGIN $id $ip mtrtxt"
-          mtr $fam $mtr_tcp -z -n -r -w -c 2 -m "$MAXHOP" "$ip" 2>/dev/null
+          mtr $fam $mtr_tcp -z -n -r -w -c 3 -m "$MAXHOP" "$ip" 2>/dev/null
         fi ;;
       traceroute)
         echo "##BEGIN $id $ip tr"
-        traceroute $fam $tr_tcp -A -n -q 1 -w 2 -m "$MAXHOP" "$ip" 2>/dev/null \
-          || traceroute $fam $tr_tcp -n -q 1 -w 2 -m "$MAXHOP" "$ip" 2>/dev/null ;;
+        traceroute $fam $tr_tcp -A -n -q 2 -w 2 -m "$MAXHOP" "$ip" 2>/dev/null \
+          || traceroute $fam $tr_tcp -n -q 2 -w 2 -m "$MAXHOP" "$ip" 2>/dev/null ;;
     esac
     echo
     echo "##END $id"
