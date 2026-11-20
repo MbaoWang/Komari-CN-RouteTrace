@@ -476,6 +476,8 @@ function classify(hops, isp, dst, opts) {
 
   if (entry < 0) {
     res.label = res.line = "未進入中國三網";
+    res.short = "未入三網";
+    res.access = "";
     res.confidence = "不足";
     res.evidence = pub.length ? "路徑上沒有出現電信 / 聯通 / 移動的 AS" : "沒有任何回應的跳點";
     return withTags(res);
@@ -583,30 +585,32 @@ function classify(hops, isp, dst, opts) {
   res.line = line;
   res.confidence = conf;
   res.evidence = ev;
-  // 接入方式（標籤寫法）：
-  //   直連       機房直接接三網，沒有國際業者          → 「移動 CMI」「直連國內移動」
-  //   本地經轉   經國際業者，但在當地交接（延遲沒增加多少）→ 「移動 CMI（經 Lumen）」
-  //   長距離承載 國際業者先帶一大段才交接                → 「Lumen 轉移動 CMI」
+  // 標籤固定寫成「線路 · 接入方式 [· 轉網]」：
+  //   short   骨幹名稱：CN2 GIA / CN2 GT / 163 / CTGNet / 9929 / CUG / 4837 / CMIN2 / CMI / CMNET / 省網直入
+  //   access  接入方式：直連 / 經 Lumen（在當地交接）/ NTT 長途承載（國際業者先帶一大段才交接）
+  //   cross   入境的電信商與目標不同時：轉聯通 … （之後是境內轉網）
+  res.short = line.startsWith("國內") ? "省網直入" : line.replace(/^(電信|聯通|移動) /, "");
+  res.carrier_name = FAMILY_NAME[F];
   const last = res.intl.length ? res.intl[res.intl.length - 1] : null;
   res.handover = last ? shortName(last.asn, last.name) : "";
-  let label;
   if (!last) {
     res.connect = "direct";
-    label = line.startsWith("國內") ? "直連" + line : line;
+    res.access = "直連";
   } else if (res.transit_shown) {
     res.connect = "long_haul";
-    label = `${res.handover} 轉${line}`;
+    res.access = `${res.handover} 長途承載`;
   } else {
     res.connect = "local_transit";
-    label = `${line}（經 ${res.handover}）`;
+    res.access = `經 ${res.handover}`;
   }
-  // 入境的電信商與目標不同：之後是境內轉網，不能算是走目標電信商的線路
+  const parts = [`${res.carrier_name} ${res.short}`, res.access];
   if (isp && F !== isp) {
     res.cross = true;
-    label += ` → 境內轉${FAMILY_NAME[isp]}`;
-    res.evidence += `；入境後${handoff ? "" : "在目的地附近"}才交給${FAMILY_NAME[isp]}`;
+    res.cross_text = `轉${FAMILY_NAME[isp]}`;
+    parts.push(res.cross_text);
+    res.evidence += `；${FAMILY_NAME[F]}入境後${handoff ? "" : "在目的地附近"}才交給${FAMILY_NAME[isp]}`;
   }
-  res.label = label;
+  res.label = parts.join(" · ");
   return withTags(res);
 }
 

@@ -12,22 +12,14 @@
 
   var PAGE = "/api/plugin/cnroute/page/index.html?embed=1";
 
-  // 圖示：漸層圓角方塊 + 白色圖案（自繪，GPL-3.0；風格參考 Qure 彩色圖示集）
-  var W = 'fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"';
-  function tile(c1, c2, glyph) {
-    return '<svg viewBox="0 0 48 48" aria-hidden="true"><defs><linearGradient id="cnrg" x1="0" y1="0" x2="1" y2="1">' +
-      '<stop offset="0" stop-color="' + c1 + '"/><stop offset="1" stop-color="' + c2 + '"/></linearGradient></defs>' +
-      '<rect width="48" height="48" rx="12" fill="url(#cnrg)"/>' + glyph + "</svg>";
-  }
-  var ICONS = {
-    route: tile("#3b82f6", "#06b6d4", '<circle cx="14" cy="34" r="3.2" fill="#fff"/><path ' + W + ' d="M17 32c8-2 4-12 12-14"/>' +
-      '<path fill="#fff" d="M34 9a6 6 0 0 0-6 6c0 4.6 6 10 6 10s6-5.4 6-10a6 6 0 0 0-6-6z"/><circle cx="34" cy="15" r="2.2" fill="url(#cnrg)"/>'),
-    globe: tile("#2563eb", "#7c3aed", '<circle ' + W + ' cx="24" cy="24" r="10"/><path ' + W + ' d="M14 24h20M24 14c-3.2 3-4.6 6.4-4.6 10s1.4 7 4.6 10M24 14c3.2 3 4.6 6.4 4.6 10s-1.4 7-4.6 10"/>' +
-      '<path ' + W + ' d="M37.5 17.5A15 15 0 0 0 11 15"/><path ' + W + ' d="M11 10v5h5"/>'),
-    hops: tile("#0ea5e9", "#10b981", '<path ' + W + ' d="M12 34l8-8 7 4 9-12"/><circle cx="12" cy="34" r="3" fill="#fff"/><circle cx="20" cy="26" r="3" fill="#fff"/>' +
-      '<circle cx="27" cy="30" r="3" fill="#fff"/><circle cx="36" cy="18" r="3.6" fill="#fff"/><circle cx="36" cy="18" r="1.4" fill="#10b981"/>'),
-    path: tile("#6366f1", "#06b6d4", '<path ' + W + ' d="M13 17h16a5 5 0 0 1 0 10H19a5 5 0 0 0 0 10h16"/><path ' + W + ' d="M31 33l4 4-4 4"/><circle cx="13" cy="17" r="3" fill="#fff"/>'),
-  };
+  // 圖示：22px 單色線條（與 Komari-Plugin-UnlockTest 的浮動按鈕風格一致：白底黑圖示，深色主題自動反轉）
+  // 圖案：起點 → 迂迴路徑 → 目的地定位點（自繪）
+  var ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<circle cx="5.5" cy="18.5" r="2.5"/>' +
+    '<path d="M8 18.5h7.5a3 3 0 0 0 0-6h-7a3 3 0 0 1 0-6H11"/>' +
+    '<path d="M18 2.5a3 3 0 0 0-3 3c0 2.25 3 5 3 5s3-2.75 3-5a3 3 0 0 0-3-3z"/>' +
+    '<circle cx="18" cy="5.5" r="0.6" fill="currentColor"/>' +
+    "</svg>";
 
   function start() {
     fetch("/api/cnroute/button", { credentials: "same-origin" })
@@ -46,19 +38,21 @@
   function mount(cfg) {
     var host = document.createElement("div");
     host.id = "cnroute-float";
-    host.style.cssText = "position:fixed;z-index:2147483000;bottom:20px;" + (cfg.position === "left" ? "left:20px;" : "right:20px;");
+    host.style.cssText = "position:fixed;z-index:2147483000;bottom:24px;" + (cfg.position === "left" ? "left:24px;" : "right:24px;");
     document.body.appendChild(host);
     // Shadow DOM：避免和主題的樣式互相影響
     var root = host.attachShadow ? host.attachShadow({ mode: "open" }) : host;
     root.innerHTML =
       "<style>" +
       ":host{all:initial}" +
-      ".btn{display:block;width:48px;height:48px;padding:0;border:0;border-radius:12px;background:transparent;" +
-      "cursor:grab;box-shadow:0 4px 14px rgba(0,0,0,.22);touch-action:none;user-select:none;-webkit-user-select:none;transition:transform .15s,box-shadow .15s}" +
-      ".btn:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(0,0,0,.28)}" +
-      ".btn:focus-visible{outline:2px solid #3b82f6;outline-offset:2px}" +
-      ".btn.drag{cursor:grabbing;transform:none;box-shadow:0 10px 26px rgba(0,0,0,.32)}" +
-      ".btn svg{display:block;width:48px;height:48px}" +
+      ".btn{display:flex;align-items:center;justify-content:center;width:48px;height:48px;padding:0;margin:0;" +
+      "border-radius:12px;border:1px solid var(--btn-line);background:var(--btn-bg);color:var(--btn-fg);" +
+      "cursor:grab;box-shadow:4px 6px 18px rgba(0,0,0,.18),1px 2px 4px rgba(0,0,0,.12);" +
+      "touch-action:none;user-select:none;-webkit-user-select:none;transition:border-color .25s,box-shadow .25s,transform .15s}" +
+      ".btn:hover{transform:translate(-1px,-1px) scale(1.04);box-shadow:6px 10px 24px rgba(0,0,0,.24),2px 3px 6px rgba(0,0,0,.14)}" +
+      ".btn:focus-visible{outline:2px solid var(--btn-fg);outline-offset:2px}" +
+      ".btn.drag{cursor:grabbing;transform:none}" +
+      ".btn svg{display:block}" +
       ".mask{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;padding:16px}" +
       ".mask.on{display:flex}" +
       ".box{position:relative;width:min(960px,100%);height:min(86vh,900px);background:var(--bg);border-radius:12px;overflow:hidden;" +
@@ -71,7 +65,7 @@
       ".x:hover{background:var(--line)}" +
       "iframe{flex:1;border:0;width:100%;background:var(--bg)}" +
       "</style>" +
-      '<button class="btn" type="button" aria-label="回程路由" title="回程路由">' + (ICONS[cfg.icon] || ICONS.route) + "</button>" +
+      '<button class="btn" type="button" aria-label="回程路由" title="回程路由">' + ICON + "</button>" +
       '<div class="mask" role="dialog" aria-label="回程路由"><div class="box">' +
       '<div class="bar"><span>回程路由</span><span><a href="' + PAGE.replace("?embed=1", "") + '" target="_blank" rel="noopener">新分頁開啟 ↗</a>' +
       '<button class="x" type="button" aria-label="關閉">×</button></span></div>' +
@@ -84,8 +78,8 @@
     function theme() {
       var dark = isDark();
       var vars = dark
-        ? "--bg:#171a21;--fg:#e5e7eb;--muted:#9ca3af;--line:#2a2f3a"
-        : "--bg:#ffffff;--fg:#1d2129;--muted:#6b7280;--line:#e5e7eb";
+        ? "--bg:#171a21;--fg:#e5e7eb;--muted:#9ca3af;--line:#2a2f3a;--btn-bg:#1e293b;--btn-fg:#f8fafc;--btn-line:rgba(255,255,255,.12)"
+        : "--bg:#ffffff;--fg:#1d2129;--muted:#6b7280;--line:#e5e7eb;--btn-bg:#ffffff;--btn-fg:#111827;--btn-line:rgba(15,23,42,.10)";
       host.dataset.vars = vars;
       applyStyle();
     }
@@ -98,11 +92,18 @@
       return { x: Math.max(4, Math.min(window.innerWidth - w - 4, p.x)), y: Math.max(4, Math.min(window.innerHeight - h - 4, p.y)) };
     }
     // 同一個角落已有其他浮動按鈕（例如其他插件的按鈕）時，排在它們上方
+    // 與 Komari-Plugin-UnlockTest 的浮動按鈕慣例對齊：距邊 24px、每格 60px（48px 按鈕 + 12px 間距）
     var side = cfg.position === "left" ? "left" : "right";
-    var stackBottom = 20;
+    var EDGE = 24;
+    var stackBottom = EDGE;
     function findStack() {
-      var vw = window.innerWidth, vh = window.innerHeight, bottom = 20;
+      var vw = window.innerWidth, vh = window.innerHeight, bottom = EDGE;
       var list = [];
+      // 已知的浮動按鈕（UnlockTest 等插件的 data-km-fab 慣例）
+      try {
+        var known = document.querySelectorAll("[data-km-fab='true'], .km-ul-trigger-btn, #km-ul-min-icon, .nf-trigger-sq");
+        for (var q = 0; q < known.length; q++) list.push(known[q]);
+      } catch (e) {}
       for (var i = 0; i < document.body.children.length; i++) {
         var el = document.body.children[i];
         list.push(el);
@@ -127,7 +128,7 @@
       if (b !== stackBottom) { stackBottom = b; applyStyle(); }
     }
     function applyStyle() {
-      var css = "position:fixed;z-index:2147483000;bottom:" + stackBottom + "px;" + side + ":20px;";
+      var css = "position:fixed;z-index:2147483000;bottom:" + stackBottom + "px;" + side + ":" + EDGE + "px;";
       if (pos) { var c = clamp(pos); css = "position:fixed;z-index:2147483000;left:" + c.x + "px;top:" + c.y + "px;"; }
       host.style.cssText = css + (host.dataset.vars || "");
     }

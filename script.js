@@ -77,7 +77,6 @@ async function getCfg() {
     transitRtt: Number.isFinite(Number(c.transit_rtt)) && c.transit_rtt !== "" ? Math.max(0, Number(c.transit_rtt)) : 50,
     floatButton: c.float_button !== false,
     floatPosition: c.float_position === "left" ? "left" : "right",
-    floatIcon: ["route", "globe", "hops", "path"].includes(c.float_icon) ? c.float_icon : "route",
     maxHops: Math.min(64, Math.max(8, Number(c.max_hops) || 30)),
     timeout: Math.min(900, Math.max(30, Number(c.timeout) || 240)),
     tgToken: String(c.tg_token || "").trim(),
@@ -135,7 +134,8 @@ function buildNodeResult(client, cfg, output, exitCode, targets) {
       hop_count: b.hops.length,
       last_rtt: comp.last_rtt,
       tags: cls.tags,
-      route: { line: cls.line, carrier: cls.carrier, cross: cls.cross, confidence: cls.confidence, evidence: cls.evidence, intl: cls.intl, intl_text: cls.intl_text, handoff_delta: cls.handoff_delta, transit_shown: cls.transit_shown },
+      route: { line: cls.line, carrier: cls.carrier, cross: cls.cross, confidence: cls.confidence, evidence: cls.evidence, intl: cls.intl, intl_text: cls.intl_text, handoff_delta: cls.handoff_delta, transit_shown: cls.transit_shown,
+        short: cls.short, access: cls.access, carrier_name: cls.carrier_name, cross_text: cls.cross_text || "", connect: cls.connect || "" },
       as_path: comp.segments.filter((s) => s.key !== "LAN").map((s) => s.key).join(" → "),
       segments: comp.segments,
     });
@@ -294,7 +294,7 @@ function load() {
     try {
       const cfg = await getCfg();
       const show = cfg.floatButton && (cfg.publicData || isAdmin(req));
-      json(res, 200, { show, position: cfg.floatPosition, icon: cfg.floatIcon });
+      json(res, 200, { show, position: cfg.floatPosition });
     } catch (e) {
       json(res, 200, { show: false });
     }

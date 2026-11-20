@@ -11,7 +11,7 @@
     "en": "Traces return routes from every server to China Telecom / Unicom / Mobile, collapses hops per AS and detects CN2 GIA / GT, 9929, CMIN2. Server IPs are masked."
   },
   "author": "MbaoWang",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "entry": "script.js",
   "permissions": {
     "node": true,
@@ -152,15 +152,7 @@
         "type": "select",
         "options": "right,left",
         "default": "right",
-        "help": "right: 右下角　left: 左下角；同一個角落已有其他插件的浮動按鈕時，會自動排在它上方。訪客可自行拖曳，位置記在各自的瀏覽器"
-      },
-      {
-        "key": "float_icon",
-        "name": "浮動按鈕圖示",
-        "type": "select",
-        "options": "route,globe,hops,path",
-        "default": "route",
-        "help": "route: 路徑＋定位點　globe: 地球＋回程箭頭　hops: 節點躍點　path: 雙向路線"
+        "help": "right: 右下角　left: 左下角；同一個角落已有其他插件的浮動按鈕（例如 UnlockTest）時，會自動排在它上方。訪客可自行拖曳，位置記在各自的瀏覽器"
       },
       {
         "key": "max_hops",

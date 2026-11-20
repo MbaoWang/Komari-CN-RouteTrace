@@ -134,6 +134,19 @@ let ver = 4;
 try { ver = Number(localStorage.getItem("cnroute-ver")) === 6 ? 6 : 4; } catch (_) {}
 const CONF = { 確認: "", 推測: "（推測）", 不足: "（證據不足）" };
 const tagText = (t) => ((t.tags || [])[0] || "") + (t.route ? CONF[t.route.confidence] || "" : "");
+// 格子大字：骨幹名稱（欄位已代表電信商；入境電信商不同時才加上電信商名稱）
+const cellMain = (t) => {
+  const r = t.route || {};
+  if (!r.short) return tagText(t); // 舊版結果
+  return (r.cross_text ? r.carrier_name + " " : "") + r.short;
+};
+// 格子小字：接入方式 · 轉網 · 延遲 · 推測 / 未到達
+const cellMeta = (t) => {
+  const r = t.route || {};
+  return [r.access, r.cross_text, t.last_rtt != null ? t.last_rtt + " ms" : "",
+    r.confidence === "推測" ? "推測" : r.confidence === "不足" ? "證據不足" : "",
+    t.reached === false ? "未到達" : ""].filter(Boolean).join(" · ");
+};
 
 const ISP_COLS = [["ct", "電信"], ["cu", "聯通"], ["cm", "移動"]];
 const openCell = {}; // 每台伺服器目前展開的目標 key
@@ -149,8 +162,8 @@ function cellHTML(n, t, key) {
   const rtt = t.last_rtt != null ? `${t.last_rtt} ms` : "";
   const body = t.error
     ? `<span class="chip ${ispColor(t)}">⚠ ${esc(t.error)}</span>`
-    : `<span class="chip ${ispColor(t)}">${esc(tagText(t) || "—")}</span>
-       <span class="meta">${rtt}${t.reached === false ? " · 未到達" : ""}</span>`;
+    : `<span class="chip ${ispColor(t)}">${esc(cellMain(t) || "—")}</span>
+       <span class="meta">${esc(t.route && t.route.short ? cellMeta(t) : rtt + (t.reached === false ? " · 未到達" : ""))}</span>`;
   return `<div><button class="cell ${openCell[n.uuid] === key ? "on" : ""}" data-node="${esc(n.uuid)}" data-key="${esc(key)}" title="${esc(t.label)}">${body}</button></div>`;
 }
 
