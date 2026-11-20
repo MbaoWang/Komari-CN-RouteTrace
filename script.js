@@ -77,6 +77,7 @@ async function getCfg() {
     transitRtt: Number.isFinite(Number(c.transit_rtt)) && c.transit_rtt !== "" ? Math.max(0, Number(c.transit_rtt)) : 50,
     floatButton: c.float_button !== false,
     floatPosition: c.float_position === "left" ? "left" : "right",
+    floatIcon: ["route", "globe", "hops", "path"].includes(c.float_icon) ? c.float_icon : "route",
     maxHops: Math.min(64, Math.max(8, Number(c.max_hops) || 30)),
     timeout: Math.min(900, Math.max(30, Number(c.timeout) || 240)),
     tgToken: String(c.tg_token || "").trim(),
@@ -293,7 +294,7 @@ function load() {
     try {
       const cfg = await getCfg();
       const show = cfg.floatButton && (cfg.publicData || isAdmin(req));
-      json(res, 200, { show, position: cfg.floatPosition });
+      json(res, 200, { show, position: cfg.floatPosition, icon: cfg.floatIcon });
     } catch (e) {
       json(res, 200, { show: false });
     }

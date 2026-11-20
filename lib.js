@@ -435,11 +435,12 @@ function classify(hops, isp, dst, opts) {
   opts = opts || {};
   const transitRtt = Number.isFinite(Number(opts.transitRtt)) ? Number(opts.transitRtt) : 50;
   const pub = [];
-  for (const h of hops) {
+  for (let hi = 0; hi < hops.length; hi++) {
+    const h = hops[hi];
     if (!h.ip || isPrivateIP(h.ip)) continue;
     const pi = prefixInfo(h.ip);
     const asn = pi ? pi.asn : h.asn || 0;
-    pub.push({ ip: h.ip, asn, owner: h.owner || "", bb: pi ? pi.bb : "", fam: familyOf(asn, h.owner), v6: h.ip.includes(":"), dst: !!dst && sameIP(h.ip, dst), rtt: typeof h.rtt === "number" ? h.rtt : null });
+    pub.push({ ip: h.ip, asn, owner: h.owner || "", bb: pi ? pi.bb : "", fam: familyOf(asn, h.owner), v6: h.ip.includes(":"), dst: !!dst && sameIP(h.ip, dst), rtt: typeof h.rtt === "number" ? h.rtt : null, idx: hi });
   }
   const isV6 = pub.length ? pub[pub.length - 1].v6 : false;
   const res = { label: "", line: "", carrier: "", cross: false, confidence: "", evidence: "", intl: [], intl_text: "" };
@@ -494,6 +495,7 @@ function classify(hops, isp, dst, opts) {
   const asnIs = (a) => (h) => h.asn === a;
   const bbIs = (b) => (h) => h.bb === b;
   let line, conf = "確認", ev = "";
+  let ambiguous = false; // 路徑再完整也無法斷定的情況（保留「推測」）
 
   if (F === "ct") {
     const cn2 = cnt(asnIs(4809));
@@ -524,7 +526,7 @@ function classify(hops, isp, dst, opts) {
         } else if (cn2 >= 2 && ct4134After <= 2) {
           line = "電信 CN2 GIA"; ev = `IPv6：${cn2} 跳 CN2（AS4809 前綴），之後只剩 ${ct4134After} 跳 AS4134 就到目的地（交給當地電信）`;
         } else if (cn2 >= 2) {
-          line = "電信 CN2 GIA"; conf = "推測"; ev = `IPv6：CN2 之後還有 ${ct4134After} 跳 AS4134，可能是省網也可能是 163 骨幹`;
+          line = "電信 CN2 GIA"; conf = "推測"; ambiguous = true; ev = `IPv6：CN2 之後還有 ${ct4134After} 跳 AS4134，可能是省網也可能是 163 骨幹`;
         } else {
           line = "電信 CN2"; conf = "不足"; ev = "IPv6：只看到 1 跳 CN2";
         }
@@ -569,6 +571,14 @@ function classify(hops, isp, dst, opts) {
       line = "國內移動"; conf = "推測"; ev = "沒有經過 CMIN2 / CMI / CMNET 骨幹，直接進入移動當地網";
     }
   }
+
+  // 路徑清楚（到達目的地，且交接點前後沒有逾時）時，看到的就是事實，不標「推測」
+  const reached = dst ? pub.some((h) => h.dst) : true;
+  const prevIdx = entry > 0 ? pub[entry - 1].idx : -1;
+  const gapAtEntry = hops.slice(prevIdx + 1, pub[entry].idx).some((h) => !h.ip);
+  res.path_clear = reached && !gapAtEntry;
+  if (conf === "推測" && res.path_clear && !ambiguous) conf = "確認";
+  if (conf === "推測" && !res.path_clear) ev += reached ? "；交接點前有跳點沒有回應" : "；沒有到達目的地";
 
   res.line = line;
   res.confidence = conf;
