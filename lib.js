@@ -470,7 +470,7 @@ function classify(hops, isp, dst, opts) {
   if (res.intl.length && res.handoff_delta !== null) {
     res.intl_text += res.transit_shown
       ? `；交接前延遲增加 ${res.handoff_delta} ms（國際業者承載長距離）`
-      : `；交接前延遲只增加 ${res.handoff_delta} ms（機房附近就交給三網）`;
+      : `；交接前延遲只增加 ${res.handoff_delta} ms（在當地就交給三網，非直連）`;
   }
 
   if (entry < 0) {
@@ -573,10 +573,23 @@ function classify(hops, isp, dst, opts) {
   res.line = line;
   res.confidence = conf;
   res.evidence = ev;
-  // 經國際業者交給三網時，標示是哪家國際業者交接的，例如「Lumen 轉國內移動」「NTT 轉電信 CN2 GIA」
-  const handover = res.transit_shown ? res.intl[res.intl.length - 1] : null;
-  res.handover = handover ? shortName(handover.asn, handover.name) : "";
-  let label = handover ? `${res.handover} 轉${line}` : line.startsWith("國內") && !res.intl.length ? "直連" + line : line;
+  // 接入方式（標籤寫法）：
+  //   直連       機房直接接三網，沒有國際業者          → 「移動 CMI」「直連國內移動」
+  //   本地經轉   經國際業者，但在當地交接（延遲沒增加多少）→ 「移動 CMI（經 Lumen）」
+  //   長距離承載 國際業者先帶一大段才交接                → 「Lumen 轉移動 CMI」
+  const last = res.intl.length ? res.intl[res.intl.length - 1] : null;
+  res.handover = last ? shortName(last.asn, last.name) : "";
+  let label;
+  if (!last) {
+    res.connect = "direct";
+    label = line.startsWith("國內") ? "直連" + line : line;
+  } else if (res.transit_shown) {
+    res.connect = "long_haul";
+    label = `${res.handover} 轉${line}`;
+  } else {
+    res.connect = "local_transit";
+    label = `${line}（經 ${res.handover}）`;
+  }
   // 入境的電信商與目標不同：之後是境內轉網，不能算是走目標電信商的線路
   if (isp && F !== isp) {
     res.cross = true;

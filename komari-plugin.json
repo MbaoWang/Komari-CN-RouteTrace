@@ -11,7 +11,7 @@
     "en": "Traces return routes from every server to China Telecom / Unicom / Mobile, collapses hops per AS and detects CN2 GIA / GT, 9929, CMIN2. Server IPs are masked."
   },
   "author": "MbaoWang",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "entry": "script.js",
   "permissions": {
     "node": true,
@@ -168,10 +168,10 @@
       },
       {
         "key": "transit_rtt",
-        "name": "國際業者承載延遲超過多少毫秒才寫進線路標籤",
+        "name": "國際業者承載延遲超過多少毫秒，算「長距離承載」",
         "type": "number",
         "default": 50,
-        "help": "例如 NTT 在美國當地就交給電信（只多幾 ms），標籤只寫「電信 163」；NTT 先帶到亞洲才交接（多 100 ms 以上）才寫「NTT 轉電信 163」。設 0 = 一律寫出"
+        "help": "沒超過（例如 Lumen 在香港當地交給 CMI）標成「移動 CMI（經 Lumen）」；超過（例如 NTT 從美國帶到香港才交接）標成「NTT 轉電信 163」。設 0 = 一律算長距離"
       },
       {
         "key": "tg_title",
