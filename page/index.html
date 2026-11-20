@@ -143,12 +143,12 @@ const cellMain = (t) => {
   const via = r.connect && r.connect !== "direct" && r.chain && r.chain.length ? r.chain[0] + " → " : "";
   return via + (r.cross_text ? r.carrier_name + " " : "") + r.short;
 };
-// 格子第二行：經過的網路（只有一段時不顯示）
+// 格子第二行：完整走法（所有國際業者 + 三網網路）；和第一行一樣時不顯示
 const cellChain = (t) => {
   const r = t.route || {};
-  // 第一行已含國際業者與入境網路，路徑比這多（例如之後轉網）才顯示
+  const full = r.chain_full && r.chain_full.length ? r.chain_full : r.chain || [];
   const shown = r.connect && r.connect !== "direct" ? 2 : 1;
-  return r.chain && r.chain.length > shown ? r.chain_text : "";
+  return full.length > shown ? full.join(" → ") : "";
 };
 // 格子小字：接入方式 · 延遲 · 推測 / 未到達
 const cellMeta = (t) => {

@@ -11,7 +11,7 @@
     "en": "Traces return routes from every server to China Telecom / Unicom / Mobile, collapses hops per AS and detects CN2 GIA / GT, 9929, CMIN2. Server IPs are masked."
   },
   "author": "MbaoWang",
-  "version": "1.7.1",
+  "version": "1.8.0",
   "entry": "script.js",
   "permissions": {
     "node": true,

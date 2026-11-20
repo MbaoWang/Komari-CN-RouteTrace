@@ -28,6 +28,36 @@ const AS_NAMES = {
   24400: "中國移動 上海",
   4538: "中國教育網 CERNET",
   3356: "Lumen (Level3)",
+  209: "Lumen (CenturyLink)",
+  3549: "Lumen (GBLX)",
+  701: "Verizon",
+  702: "Verizon",
+  7018: "AT&T",
+  1239: "Sprint",
+  2828: "Verizon (XO)",
+  3320: "DTAG",
+  1273: "Vodafone",
+  5511: "Orange",
+  12956: "Telxius",
+  9002: "RETN",
+  7922: "Comcast",
+  20940: "Akamai",
+  2516: "KDDI",
+  4713: "NTT OCN",
+  17676: "SoftBank",
+  4766: "KT",
+  9318: "SK Broadband",
+  3786: "LG U+",
+  1221: "Telstra",
+  7545: "TPG",
+  9498: "Airtel",
+  4755: "TATA India",
+  10026: "Telstra (Pacnet)",
+  64050: "BGPNET",
+  199524: "Gcore",
+  45102: "Alibaba",
+  132203: "Tencent",
+  55990: "Huawei Cloud",
   1299: "Arelion (Telia)",
   2914: "NTT",
   174: "Cogent",
@@ -140,6 +170,8 @@ function prefixInfo(ip) {
     let bb = BB_BY_ASN[asn] || "";
     if (asn === 4134 && ((h[0] === "240e" && h[1] === "0000") || (h[0] === "2400" && h[1] === "9380"))) bb = "163";
     if (asn === 9808 && h[0] === "2409" && h[1] === "8080") bb = "cmnet";
+    //   聯通 169（4837）：2408:8000::/32（骨幹互連，相當於 IPv4 的 219.158）
+    if (asn === 4837 && h[0] === "2408" && h[1] === "8000") bb = "169";
     return { asn, bb };
   }
   return null;
@@ -427,7 +459,9 @@ function compressPath(hops, opts) {
 // 3. 入境前經過的國際 AS 依序列出。
 // 標籤用的短名稱：「Lumen (Level3)」→「Lumen」，沒有名稱就用 AS 號
 function shortName(asn, name) {
-  const n = String(AS_NAMES[asn] || name || "").replace(/\s*\(.*\)\s*$/, "").trim();
+  let n = String(AS_NAMES[asn] || name || "").replace(/\s*\(.*\)\s*$/, "").trim();
+  const dom = n.match(/^(?:www\.)?([a-z0-9-]+)\.(?:com|net|org|io|co|jp|hk|sg|us|de|uk)(?:\.[a-z]{2})?$/i);
+  if (dom) n = dom[1].charAt(0).toUpperCase() + dom[1].slice(1);
   return n || "AS" + asn;
 }
 
@@ -511,35 +545,28 @@ function classify(hops, isp, dst, opts) {
     const b163 = cnt(bbIs("163"));
     const firstCn2 = idx(asnIs(4809));
     if (cn2 > 0) {
-      if (!isV6) {
-        if (b163 > 0) {
-          line = "電信 CN2 GT";
-          ev = idx(bbIs("163")) < firstCn2 ? "先進 202.97（163 骨幹）再進 59.43" : "59.43（CN2）之後接上 202.97（163 骨幹）";
-        } else if (cn2 >= 2) {
-          line = "電信 CN2 GIA";
-          ev = "全程走 59.43（CN2），未經 202.97，最後才交給當地電信";
-        } else {
-          line = "電信 CN2"; conf = "不足"; ev = "只看到 1 跳 59.43，無法區分 GIA / GT";
-        }
+      // GIA = 全程走 CN2（CTGNet 國際網入境後接 CN2 也算），最後才交給當地電信。
+      // GT  = 中間經過 163：163 骨幹段（202.97 / 240e:0::），或 CN2 之前出現的 AS4134
+      //       （例如電信 163 的海外節點 218.30.x，在 CN2 之前就是走 163 入境）。
+      //       CN2 之後的 AS4134 若不是骨幹段，視為交給當地電信省網，不影響判斷。
+      const lastCn2 = core.length - 1 - core.slice().reverse().findIndex(asnIs(4809));
+      const pre163 = core.slice(0, firstCn2).filter((h) => h.asn === 4134).length;
+      const mid163 = core.slice(firstCn2, lastCn2 + 1).filter((h) => h.asn === 4134).length;
+      const post4134 = core.slice(lastCn2 + 1).filter((h) => h.asn === 4134 && h.bb !== "163").length;
+      const bbName = isV6 ? "163 骨幹（240e:0:: / 2400:9380:8xxx）" : "202.97（163 骨幹）";
+      if (b163 > 0 || pre163 > 0 || mid163 > 0) {
+        line = "電信 CN2 GT";
+        if (pre163 > 0) ev = "先經過電信 163（AS4134" + (b163 > 0 ? "" : "，例如 163 的海外節點") + "）再進 CN2";
+        else if (mid163 > 0) ev = "CN2 中間經過 163（AS4134）";
+        else ev = "CN2 之後接上 " + bbName;
+      } else if (cn2 >= 2 && (!isV6 || post4134 <= 2)) {
+        line = "電信 CN2 GIA";
+        ev = (isV6 ? `IPv6：${cn2} 跳 CN2（AS4809 前綴）` : "全程走 59.43（CN2）") + "，沒有經過 163，最後才交給當地電信";
+      } else if (cn2 >= 2) {
+        line = "電信 CN2 GIA"; conf = "推測"; ambiguous = true;
+        ev = `IPv6：CN2 之後還有 ${post4134} 跳 AS4134，可能是省網也可能是 163 骨幹`;
       } else {
-        // IPv6：CN2 用 bgp.tools 的 AS4809 前綴確認；163 骨幹只有 2400:9380:8xxx 可當證據，
-        // 其餘 240e::/20 的 AS4134 跳點可能是骨幹也可能是省網，用位置與數量判斷。
-        const b163v6 = cnt(bbIs("163"));
-        const lastCn2 = core.length - 1 - core.slice().reverse().findIndex(asnIs(4809));
-        const ct4134Before = core.slice(0, firstCn2).filter(asnIs(4134)).length;
-        const ct4134After = core.slice(lastCn2 + 1).filter(asnIs(4134)).length;
-        if (b163v6 > 0) {
-          line = "電信 CN2 GT";
-          ev = idx(bbIs("163")) < firstCn2 ? "IPv6：先進 163 骨幹（240e:0:: / 2400:9380:8xxx）再進 CN2" : "IPv6：CN2 之後接上 163 骨幹（240e:0:: / 2400:9380:8xxx）";
-        } else if (ct4134Before > 0) {
-          line = "電信 CN2 GT"; conf = "推測"; ev = "IPv6：AS4134 出現在 CN2（AS4809）之前";
-        } else if (cn2 >= 2 && ct4134After <= 2) {
-          line = "電信 CN2 GIA"; ev = `IPv6：${cn2} 跳 CN2（AS4809 前綴），之後只剩 ${ct4134After} 跳 AS4134 就到目的地（交給當地電信）`;
-        } else if (cn2 >= 2) {
-          line = "電信 CN2 GIA"; conf = "推測"; ambiguous = true; ev = `IPv6：CN2 之後還有 ${ct4134After} 跳 AS4134，可能是省網也可能是 163 骨幹`;
-        } else {
-          line = "電信 CN2"; conf = "不足"; ev = "IPv6：只看到 1 跳 CN2";
-        }
+        line = "電信 CN2"; conf = "不足"; ev = "只看到 1 跳 CN2，無法區分 GIA / GT";
       }
     } else if (cnt(asnIs(23764)) > 0) {
       line = "電信 CTGNet";
@@ -555,12 +582,12 @@ function classify(hops, isp, dst, opts) {
     const f9929 = idx(asnIs(9929));
     const f169 = idx(bbIs("169"));
     if (f9929 >= 0) {
-      if (f169 >= 0 && f169 < f9929) { line = "聯通 4837/9929 混合"; conf = "推測"; ev = "先經 219.158（4837 骨幹）再進 9929"; }
+      if (f169 >= 0 && f169 < f9929) { line = "聯通 4837/9929 混合"; conf = "推測"; ev = "先經 4837 骨幹（" + (isV6 ? "2408:8000::" : "219.158") + "）再進 9929"; }
       else { line = "聯通 9929"; ev = isV6 ? "IPv6：經過 AS9929 的宣告前綴" : "經過 AS9929（218.105 / 210.51）"; }
     } else if (cnt(asnIs(10099)) > 0) {
       line = "聯通 CUG (10099)"; ev = "經過 AS10099" + (f169 >= 0 ? "，之後接 4837 骨幹" : "");
     } else if (f169 >= 0) {
-      line = "聯通 4837"; ev = "經過 219.158（4837 / 169 骨幹）";
+      line = "聯通 4837"; ev = isV6 ? "IPv6：經過 4837 / 169 骨幹（2408:8000::）" : "經過 219.158（4837 / 169 骨幹）";
     } else if (isV6 && cnt(asnIs(4837)) >= 2) {
       line = "聯通 4837"; conf = "推測"; ev = "IPv6：多跳 AS4837";
     } else {
@@ -613,9 +640,18 @@ function classify(hops, isp, dst, opts) {
     if (h.fam === "cm") return h.asn === 58807 ? "CMIN2" : h.asn === 58453 ? "CMI" : h.bb === "cmnet" ? "CMNET" : "省網";
     return null;
   };
+  const tail = pub.slice(entry);
+  const isBackbone = (h) => [4809, 23764, 58807, 58453, 10099, 9929].includes(h.asn) || ["163", "169", "cmnet"].includes(h.bb);
+  const lastBB = {};
+  tail.forEach((h, k) => { if (h.fam && isBackbone(h)) lastBB[h.fam] = k; });
   const items = [];
-  for (const h of pub.slice(entry)) {
-    const name = netName(h);
+  for (let k = 0; k < tail.length; k++) {
+    const h = tail[k];
+    let name = netName(h);
+    if (name === "省網" && lastBB[h.fam] !== undefined && k < lastBB[h.fam]) {
+      if (h.asn === 4134) name = "163";
+      else if (h.asn === 4837) name = "4837";
+    }
     if (!name) continue;
     const prev = items[items.length - 1];
     if (prev && prev.fam === h.fam && prev.name === name) continue;
@@ -630,6 +666,8 @@ function classify(hops, isp, dst, opts) {
     return newCarrier ? FAMILY_NAME[it.fam] + " " + it.name : it.name;
   }));
   res.chain_text = res.chain.join(" → ");
+  res.chain_full = res.intl.map((r) => shortName(r.asn, r.name)).concat(res.chain.slice(last ? 1 : 0));
+  res.chain_full_text = res.chain_full.join(" → ");
 
   if (isp && F !== isp) {
     res.cross = true;

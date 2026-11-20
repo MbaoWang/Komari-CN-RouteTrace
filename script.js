@@ -150,7 +150,7 @@ function buildNodeResult(client, cfg, output, exitCode, targets) {
       tags: cls.tags,
       route: { line: cls.line, carrier: cls.carrier, cross: cls.cross, confidence: cls.confidence, evidence: cls.evidence, intl: cls.intl, intl_text: cls.intl_text, handoff_delta: cls.handoff_delta, transit_shown: cls.transit_shown,
         short: cls.short, access: cls.access, carrier_name: cls.carrier_name, cross_text: cls.cross_text || "", connect: cls.connect || "",
-        chain: cls.chain || [], chain_text: cls.chain_text || "" },
+        chain: cls.chain || [], chain_text: cls.chain_text || "", chain_full: cls.chain_full || [], chain_full_text: cls.chain_full_text || "" },
       as_path: comp.segments.filter((s) => s.key !== "LAN").map((s) => s.key).join(" → "),
       segments: comp.segments,
     });
