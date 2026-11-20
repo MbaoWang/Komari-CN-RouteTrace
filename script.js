@@ -149,7 +149,8 @@ function buildNodeResult(client, cfg, output, exitCode, targets) {
       last_rtt: comp.last_rtt,
       tags: cls.tags,
       route: { line: cls.line, carrier: cls.carrier, cross: cls.cross, confidence: cls.confidence, evidence: cls.evidence, intl: cls.intl, intl_text: cls.intl_text, handoff_delta: cls.handoff_delta, transit_shown: cls.transit_shown,
-        short: cls.short, access: cls.access, carrier_name: cls.carrier_name, cross_text: cls.cross_text || "", connect: cls.connect || "" },
+        short: cls.short, access: cls.access, carrier_name: cls.carrier_name, cross_text: cls.cross_text || "", connect: cls.connect || "",
+        chain: cls.chain || [], chain_text: cls.chain_text || "" },
       as_path: comp.segments.filter((s) => s.key !== "LAN").map((s) => s.key).join(" → "),
       segments: comp.segments,
     });

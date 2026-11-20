@@ -125,14 +125,21 @@ function prefixInfo(ip) {
   }
   const h = expand6(ip);
   if (h) {
-    const asn = lookup6(h.join(""));
+    let asn = lookup6(h.join(""));
+    // 2400:9380::/32 是電信的骨幹 / 國際網設施段。bgp.tools 上的細分宣告：
+    //   9xxx → AS4809（CN2）、axxx → AS23764（CTGNet）、8xxx → AS4134（163）。
+    // 路由器互連位址的 /48 多半沒有宣告（例如香港的 2400:9380:a009::c），依同樣規則補上。
+    if (!asn && h[0] === "2400" && h[1] === "9380") {
+      asn = { "8": 4134, "9": 4809, a: 23764 }[h[2][0]] || 0;
+    }
     if (!asn) return null;
     // AS4809 / 23764 / 58807 / 58453 / 10099 / 9929 只做骨幹或國際網，命中即可確認骨幹種類。
-    // AS4134 / 4837 / 9808 的 IPv6 宣告是整片（例如 240e::/20），骨幹與省網分不開，只用來辨識是哪一家。
-    // 例外：2400:9380::/32 是電信骨幹設施位址段（CN2 / CTGNet / 163 的細分 /48 都在這裡），
-    // 其中 AS4134 的 2400:9380:8xxx 視為 163 骨幹（推測）。
-    const bb = BB_BY_ASN[asn] ||
-      (asn === 4134 && h[0] === "2400" && h[1] === "9380" ? "163?" : "");
+    // AS4134 / 4837 / 9808 的 IPv6 宣告是整片（例如 240e::/20），用以下骨幹設施段區分骨幹與省網：
+    //   電信 163：240e:0::/32（骨幹互連，未宣告，相當於 IPv4 的 202.97）、2400:9380:8xxx
+    //   移動 CMNET：2409:8080::/32（骨幹互連）
+    let bb = BB_BY_ASN[asn] || "";
+    if (asn === 4134 && ((h[0] === "240e" && h[1] === "0000") || (h[0] === "2400" && h[1] === "9380"))) bb = "163";
+    if (asn === 9808 && h[0] === "2409" && h[1] === "8080") bb = "cmnet";
     return { asn, bb };
   }
   return null;
@@ -517,12 +524,13 @@ function classify(hops, isp, dst, opts) {
       } else {
         // IPv6：CN2 用 bgp.tools 的 AS4809 前綴確認；163 骨幹只有 2400:9380:8xxx 可當證據，
         // 其餘 240e::/20 的 AS4134 跳點可能是骨幹也可能是省網，用位置與數量判斷。
-        const b163v6 = cnt(bbIs("163?"));
+        const b163v6 = cnt(bbIs("163"));
         const lastCn2 = core.length - 1 - core.slice().reverse().findIndex(asnIs(4809));
         const ct4134Before = core.slice(0, firstCn2).filter(asnIs(4134)).length;
         const ct4134After = core.slice(lastCn2 + 1).filter(asnIs(4134)).length;
         if (b163v6 > 0) {
-          line = "電信 CN2 GT"; conf = "推測"; ev = "IPv6：CN2（AS4809）之外經過 2400:9380:8xxx（AS4134 骨幹設施段）";
+          line = "電信 CN2 GT";
+          ev = idx(bbIs("163")) < firstCn2 ? "IPv6：先進 163 骨幹（240e:0:: / 2400:9380:8xxx）再進 CN2" : "IPv6：CN2 之後接上 163 骨幹（240e:0:: / 2400:9380:8xxx）";
         } else if (ct4134Before > 0) {
           line = "電信 CN2 GT"; conf = "推測"; ev = "IPv6：AS4134 出現在 CN2（AS4809）之前";
         } else if (cn2 >= 2 && ct4134After <= 2) {
@@ -534,11 +542,10 @@ function classify(hops, isp, dst, opts) {
         }
       }
     } else if (cnt(asnIs(23764)) > 0) {
-      line = "電信 CTGNet"; ev = "經過 AS23764";
+      line = "電信 CTGNet";
+      ev = "經過電信國際網 CTGNet（AS23764" + (isV6 ? "，2400:9380:axxx" : "") + "）" + (b163 > 0 ? "，入境後接 163 骨幹" : "") + "，未經 CN2";
     } else if (b163 > 0) {
-      line = "電信 163"; ev = "經過 202.97（163 骨幹）";
-    } else if (isV6 && cnt(bbIs("163?")) > 0) {
-      line = "電信 163"; conf = "推測"; ev = "IPv6：經過 2400:9380:8xxx（AS4134 骨幹設施段），無 CN2";
+      line = "電信 163"; ev = isV6 ? "IPv6：經過 163 骨幹（240e:0:: / 2400:9380:8xxx）" : "經過 202.97（163 骨幹）";
     } else if (isV6 && cnt(asnIs(4134)) >= 2) {
       line = "電信 163"; conf = "推測"; ev = "IPv6：多跳 AS4134，無 CN2";
     } else {
@@ -568,7 +575,7 @@ function classify(hops, isp, dst, opts) {
     } else if (fCmi >= 0) {
       line = "移動 CMI"; ev = "經過 AS58453（CMI），未見 CMIN2";
     } else if (cnt(bbIs("cmnet")) > 0) {
-      line = "移動 CMNET"; ev = "直接進 CMNET 骨幹（221.183 / 111.24）";
+      line = "移動 CMNET"; ev = isV6 ? "直接進 CMNET 骨幹（2409:8080::）" : "直接進 CMNET 骨幹（221.183 / 111.24）";
     } else {
       line = "國內移動"; conf = "推測"; ev = "沒有經過 CMIN2 / CMI / CMNET 骨幹，直接進入移動當地網";
     }
@@ -593,24 +600,46 @@ function classify(hops, isp, dst, opts) {
   res.carrier_name = FAMILY_NAME[F];
   const last = res.intl.length ? res.intl[res.intl.length - 1] : null;
   res.handover = last ? shortName(last.asn, last.name) : "";
-  if (!last) {
-    res.connect = "direct";
-    res.access = "直連";
-  } else if (res.transit_shown) {
-    res.connect = "long_haul";
-    res.access = `${res.handover} 長途承載`;
-  } else {
-    res.connect = "local_transit";
-    res.access = `經 ${res.handover}`;
+  // 接入方式：直連（機房直接接三網）/ 本地交接（國際業者在當地交給三網）/ 長途承載（國際業者先帶一大段才交接）
+  if (!last) { res.connect = "direct"; res.access = "直連"; }
+  else if (res.transit_shown) { res.connect = "long_haul"; res.access = "長途承載"; }
+  else { res.connect = "local_transit"; res.access = "本地交接"; }
+
+  // 路徑：依序寫出交接的國際業者與經過的三網網路，轉網時標出新的電信商，例如
+  //   「電信 CTGNet → 163 → 移動 CMNET」「Cogent → 電信 163」「電信 CN2 → 163」
+  const netName = (h) => {
+    if (h.fam === "ct") return h.asn === 23764 ? "CTGNet" : h.asn === 4809 ? "CN2" : h.bb === "163" ? "163" : "省網";
+    if (h.fam === "cu") return h.asn === 9929 ? "9929" : h.asn === 10099 ? "CUG" : h.bb === "169" ? "4837" : "省網";
+    if (h.fam === "cm") return h.asn === 58807 ? "CMIN2" : h.asn === 58453 ? "CMI" : h.bb === "cmnet" ? "CMNET" : "省網";
+    return null;
+  };
+  const items = [];
+  for (const h of pub.slice(entry)) {
+    const name = netName(h);
+    if (!name) continue;
+    const prev = items[items.length - 1];
+    if (prev && prev.fam === h.fam && prev.name === name) continue;
+    items.push({ fam: h.fam, name });
   }
-  const parts = [`${res.carrier_name} ${res.short}`, res.access];
+  // 同一家的骨幹之後交給自家省網是正常的收尾，不寫出來
+  while (items.length > 1 && items[items.length - 1].name === "省網" && items[items.length - 2].fam === items[items.length - 1].fam &&
+    items[items.length - 2].name !== "省網") items.pop();
+  res.chain = (last ? [res.handover] : []).concat(items.map((it, k) => {
+    const newCarrier = k === 0 || items[k - 1].fam !== it.fam;
+    if (it.name === "省網") return FAMILY_NAME[it.fam] + "省網";
+    return newCarrier ? FAMILY_NAME[it.fam] + " " + it.name : it.name;
+  }));
+  res.chain_text = res.chain.join(" → ");
+
   if (isp && F !== isp) {
     res.cross = true;
     res.cross_text = `轉${FAMILY_NAME[isp]}`;
-    parts.push(res.cross_text);
     res.evidence += `；${FAMILY_NAME[F]}入境後${handoff ? "" : "在目的地附近"}才交給${FAMILY_NAME[isp]}`;
   }
-  res.label = parts.join(" · ");
+  // 完整標籤（Telegram / 推播用）：有多段路徑就寫路徑，線路名稱不在路徑裡時（例如 CN2 GIA / GT）補在括號
+  const head = res.chain.length > 1 ? res.chain_text : `${res.carrier_name} ${res.short}`;
+  const inChain = res.chain.some((c) => c === res.short || c.endsWith(" " + res.short) || c.endsWith(res.short));
+  res.label = head + (res.chain.length > 1 && !inChain ? `（${res.short}）` : "") + " · " + res.access;
   return withTags(res);
 }
 

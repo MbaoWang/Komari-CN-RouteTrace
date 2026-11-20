@@ -78,6 +78,7 @@
   .cell:hover { border-color: var(--line); }
   .cell.on { border-color: var(--accent); background: var(--chip); }
   .cell .chip { white-space: normal; text-align: left; }
+  .cell .chain { font-size: 12px; color: var(--fg); overflow-wrap: anywhere; }
   .cell .meta { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .cell.none { cursor: default; color: var(--muted); font-size: 12px; }
   .detail { border-bottom: 1px solid var(--line); }
@@ -140,10 +141,15 @@ const cellMain = (t) => {
   if (!r.short) return tagText(t); // 舊版結果
   return (r.cross_text ? r.carrier_name + " " : "") + r.short;
 };
-// 格子小字：接入方式 · 轉網 · 延遲 · 推測 / 未到達
+// 格子第二行：經過的網路（只有一段時不顯示）
+const cellChain = (t) => {
+  const r = t.route || {};
+  return r.chain && r.chain.length > 1 ? r.chain_text : "";
+};
+// 格子小字：接入方式 · 延遲 · 推測 / 未到達
 const cellMeta = (t) => {
   const r = t.route || {};
-  return [r.access, r.cross_text, t.last_rtt != null ? t.last_rtt + " ms" : "",
+  return [r.access, t.last_rtt != null ? t.last_rtt + " ms" : "",
     r.confidence === "推測" ? "推測" : r.confidence === "不足" ? "證據不足" : "",
     t.reached === false ? "未到達" : ""].filter(Boolean).join(" · ");
 };
@@ -163,6 +169,7 @@ function cellHTML(n, t, key) {
   const body = t.error
     ? `<span class="chip ${ispColor(t)}">⚠ ${esc(t.error)}</span>`
     : `<span class="chip ${ispColor(t)}">${esc(cellMain(t) || "—")}</span>
+       ${cellChain(t) ? `<span class="chain">${esc(cellChain(t))}</span>` : ""}
        <span class="meta">${esc(t.route && t.route.short ? cellMeta(t) : rtt + (t.reached === false ? " · 未到達" : ""))}</span>`;
   return `<div><button class="cell ${openCell[n.uuid] === key ? "on" : ""}" data-node="${esc(n.uuid)}" data-key="${esc(key)}" title="${esc(t.label)}">${body}</button></div>`;
 }
