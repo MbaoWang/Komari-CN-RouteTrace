@@ -50,6 +50,29 @@
   button:hover { border-color: var(--accent); }
   button[disabled] { opacity: .5; cursor: default; }
   .empty { color: var(--muted); padding: 24px; text-align: center; }
+  .nhead { padding: 12px 14px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .grid { display: grid; grid-template-columns: 64px repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--line); }
+  .grid > div { padding: 8px 10px; border-bottom: 1px solid var(--line); min-width: 0; }
+  .grid .gh { color: var(--muted); font-size: 12px; padding-top: 6px; padding-bottom: 6px; }
+  .grid .gh.ct { color: var(--ct); } .grid .gh.cu { color: var(--cu); } .grid .gh.cm { color: var(--cm); }
+  .grid .rg { font-weight: 600; display: flex; align-items: center; }
+  .grid .other { grid-column: 2 / -1; }
+  .cell { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; text-align: left;
+    border: 1px solid transparent; background: transparent; padding: 4px 6px; border-radius: 6px; cursor: pointer; font: inherit; color: inherit; }
+  .cell:hover { border-color: var(--line); }
+  .cell.on { border-color: var(--accent); background: var(--chip); }
+  .cell .chip { white-space: normal; text-align: left; }
+  .cell .meta { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .cell.none { cursor: default; color: var(--muted); font-size: 12px; }
+  .detail { border-bottom: 1px solid var(--line); }
+  .detail .dh { padding: 10px 14px 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .detail .aspath { padding: 4px 14px 0; display: block; }
+  @media (max-width: 640px) {
+    .grid { grid-template-columns: 44px repeat(3, minmax(0, 1fr)); }
+    .grid > div { padding: 6px 4px; }
+    .cell { padding: 3px 4px; }
+    .cell .chip { font-size: 11px; padding: 1px 6px; }
+  }
   .embed header h1 { display: none; }
   .embed header { padding-top: 10px; }
   .why { padding: 6px 10px; font-size: 12px; color: var(--muted); display: grid; gap: 2px; }
@@ -84,8 +107,8 @@ const ago = (iso) => {
   if (s < 86400) return Math.round(s / 3600) + " 小時前";
   return new Date(iso).toLocaleString();
 };
-const ispClass = (tag) => /CN2|電信|CTG/.test(tag) ? "ct" : /聯通/.test(tag) ? "cu" : /移動/.test(tag) ? "cm" : "bad";
-const open = new Set();
+// 顏色一律依目標所屬的電信商（欄位）：電信藍、聯通紅、移動綠；沒有電信商的自訂目標用中性色
+const ispColor = (t) => (["ct", "cu", "cm"].includes(t.isp) ? t.isp : "");
 let isAdmin = false;
 // 浮動按鈕開啟時帶 ?embed=1：唯讀檢視，不顯示檢測按鈕與頁首
 const EMBED = new URLSearchParams(location.search).get("embed") === "1";
@@ -96,13 +119,26 @@ try { ver = Number(localStorage.getItem("cnroute-ver")) === 6 ? 6 : 4; } catch (
 const CONF = { 確認: "", 推測: "（推測）", 不足: "（證據不足）" };
 const tagText = (t) => ((t.tags || [])[0] || "") + (t.route ? CONF[t.route.confidence] || "" : "");
 
-function renderTarget(t, key) {
-  const tags = t.error ? "" : (t.tags || []).slice(0, 1).map((x) => `<span class="chip ${ispClass(x)}">${esc(tagText(t))}</span>`).join(" ");
-  const why = t.route ? `<div class="why">
-      <div><b>判斷依據</b>　${esc(t.route.evidence || "—")}</div>
-      <div><b>國際段</b>　${esc(t.route.intl_text || "—")}</div>
-    </div>` : "";
-  const rtt = t.last_rtt != null ? `${t.last_rtt} ms` : "—";
+const ISP_COLS = [["ct", "電信"], ["cu", "聯通"], ["cm", "移動"]];
+const openCell = {}; // 每台伺服器目前展開的目標 key
+
+// 「北京電信」→ 地區「北京」；沒有電信商字樣的自訂目標放在「其他」列
+function regionOf(t) {
+  const r = String(t.label || "").replace(/(電信|电信|聯通|联通|移動|移动)$/, "").trim();
+  return t.isp && r && r !== t.label ? r : "";
+}
+
+function cellHTML(n, t, key) {
+  if (!t) return `<div><span class="cell none">—</span></div>`;
+  const rtt = t.last_rtt != null ? `${t.last_rtt} ms` : "";
+  const body = t.error
+    ? `<span class="chip ${ispColor(t)}">⚠ ${esc(t.error)}</span>`
+    : `<span class="chip ${ispColor(t)}">${esc(tagText(t) || "—")}</span>
+       <span class="meta">${rtt}${t.reached === false ? " · 未到達" : ""}</span>`;
+  return `<div><button class="cell ${openCell[n.uuid] === key ? "on" : ""}" data-node="${esc(n.uuid)}" data-key="${esc(key)}" title="${esc(t.label)}">${body}</button></div>`;
+}
+
+function detailHTML(t) {
   const segs = (t.segments || []).map((s) => `
     <div class="seg ${s.key === "LAN" ? "lan" : ""}">
       <div class="asn">${esc(s.key === "LAN" ? "LAN" : s.key)}</div>
@@ -110,19 +146,47 @@ function renderTarget(t, key) {
         ${s.ips && s.ips.length ? `<div class="ips">${s.ips.map(esc).join("　")}</div>` : ""}</div>
       <div class="hopn">${s.hops} 跳${s.timeouts ? ` +${s.timeouts}*` : ""}${s.rtt_out != null ? ` · ${s.rtt_out} ms` : ""}</div>
     </div>`).join("");
-  return `<details class="t" data-k="${esc(key)}" ${open.has(key) ? "open" : ""}>
-    <summary>
-      <span class="label ${esc(t.isp)}">${esc(t.label)}</span>
-      <span>${tags} <span class="aspath">${esc(t.as_path || t.error || "")}</span></span>
-      <span class="rtt">${t.reached === false ? '<span class="chip bad">未到達</span> ' : ""}${rtt}</span>
-    </summary>
+  const why = t.route ? `<div class="why">
+      <div><b>判斷依據</b>　${esc(t.route.evidence || "—")}</div>
+      <div><b>國際段</b>　${esc(t.route.intl_text || "—")}</div>
+    </div>` : "";
+  return `<div class="detail">
+    <div class="dh"><span class="label ${esc(t.isp)}">${esc(t.label)}</span>
+      ${t.error ? "" : `<span class="chip ${ispColor(t)}">${esc(tagText(t))}</span>`}
+      <span class="spacer"></span><span class="rtt">${t.last_rtt != null ? t.last_rtt + " ms" : ""}</span></div>
+    <span class="aspath">${esc(t.as_path || t.error || "")}</span>
     <div class="segs">${why}${segs || '<div class="sub">沒有資料</div>'}</div>
-  </details>`;
+  </div>`;
+}
+
+function nodeGrid(n, targets) {
+  if (!targets.length) return '<div class="empty">尚無結果</div>';
+  const regions = [];
+  const byRegion = {};
+  const others = [];
+  targets.forEach((t, i) => {
+    const key = "v" + ver + ":" + t.label + ":" + t.ip;
+    const r = regionOf(t);
+    if (!r) { others.push([t, key]); return; }
+    if (!byRegion[r]) { byRegion[r] = {}; regions.push(r); }
+    byRegion[r][t.isp] = [t, key];
+  });
+  let html = `<div class="grid"><div class="gh"></div>${ISP_COLS.map(([c, name]) => `<div class="gh ${c}">${name}</div>`).join("")}`;
+  for (const r of regions) {
+    html += `<div class="rg">${esc(r)}</div>` + ISP_COLS.map(([c]) => {
+      const hit = byRegion[r][c];
+      return hit ? cellHTML(n, hit[0], hit[1]) : cellHTML(n, null);
+    }).join("");
+  }
+  for (const [t, key] of others) html += `<div class="rg">其他</div><div class="other">${cellHTML(n, t, key).slice(5, -6)}</div>`;
+  html += "</div>";
+  const open = targets.find((t) => "v" + ver + ":" + t.label + ":" + t.ip === openCell[n.uuid]);
+  return html + (open ? detailHTML(open) : "");
 }
 
 function render(data) {
   isAdmin = !!data.admin && !EMBED;
-  document.getElementById("sub").textContent = `每 ${data.interval} 分鐘自動檢測 · 點擊目標展開每個 AS 的詳細資訊`;
+  document.getElementById("sub").textContent = `每 ${data.interval} 分鐘自動檢測 · 點擊線路查看每個 AS 的詳細路徑`;
   lastData = data;
   // 伺服器有被選入哪些版本（舊版 API 沒有 versions 時，從結果推回）
   const versOf = (n) => n.versions || [...new Set((n.targets || []).map((t) => t.v || 4))];
@@ -136,24 +200,19 @@ function render(data) {
   const nodes = data.nodes.filter((n) => versOf(n).includes(ver));
   if (!nodes.length) { list.innerHTML = `<div class="empty">沒有伺服器啟用 IPv${ver} 檢測</div>`; return; }
   list.innerHTML = nodes.map((n) => {
-    const nk = "n:" + n.uuid;
     const targets = (n.targets || []).filter((t) => (t.v || 4) === ver);
-    const summary = {};
-    targets.forEach((t) => { const tag = t.error ? "" : (t.tags || [])[0]; if (tag && !summary[tag]) summary[tag] = t.isp; });
     const src = ver === 6 ? n.src6_masked : n.src_masked;
-    const chips = Object.keys(summary).map((t) => `<span class="chip ${ispClass(t)}">${esc(t)}</span>`).join(" ");
-    return `<details class="node" data-k="${esc(nk)}" ${open.has(nk) ? "open" : ""}>
-      <summary>
+    return `<div class="node">
+      <div class="nhead">
         <span class="name">${esc(n.name)}</span>
         ${src ? `<span class="ip">${esc(src)}</span>` : ""}
-        ${chips}
         <span class="spacer"></span>
         <span class="sub">${n.running ? "檢測中…" : esc(ago(n.updated_at))}${n.tool ? " · " + esc(n.tool) : ""}</span>
         ${isAdmin ? `<button data-run="${esc(n.uuid)}" ${n.running ? "disabled" : ""}>立即檢測</button>` : ""}
-      </summary>
+      </div>
       ${n.error ? `<div class="err">${esc(n.error)}</div>` : ""}
-      <div class="targets">${targets.map((t, i) => renderTarget(t, nk + ":v" + ver + ":" + i)).join("") || '<div class="empty">尚無結果</div>'}</div>
-    </details>`;
+      ${nodeGrid(n, targets)}
+    </div>`;
   }).join("");
 }
 
@@ -176,15 +235,14 @@ async function run(uuid) {
   refresh();
 }
 
-document.addEventListener("toggle", (e) => {
-  const k = e.target.dataset && e.target.dataset.k;
-  if (k) e.target.open ? open.add(k) : open.delete(k);
-}, true);
 document.addEventListener("click", (e) => {
   const b = e.target.closest("button");
   if (!b) return;
   e.preventDefault();
-  if (b.dataset.ver) {
+  if (b.dataset.node) {
+    openCell[b.dataset.node] = openCell[b.dataset.node] === b.dataset.key ? "" : b.dataset.key;
+    if (lastData) render(lastData);
+  } else if (b.dataset.ver) {
     ver = Number(b.dataset.ver);
     try { localStorage.setItem("cnroute-ver", String(ver)); } catch (_) {}
     if (lastData) render(lastData);

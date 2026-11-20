@@ -30,17 +30,20 @@
     var host = document.createElement("div");
     host.id = "cnroute-float";
     host.style.cssText = "position:fixed;z-index:2147483000;bottom:20px;" + (cfg.position === "left" ? "left:20px;" : "right:20px;");
+    host.dataset.base = host.style.cssText;
     document.body.appendChild(host);
     // Shadow DOM：避免和主題的樣式互相影響
     var root = host.attachShadow ? host.attachShadow({ mode: "open" }) : host;
     root.innerHTML =
       "<style>" +
       ":host{all:initial}" +
-      ".btn{display:flex;align-items:center;gap:6px;height:40px;padding:0 14px;border-radius:999px;border:1px solid var(--line);" +
-      "background:var(--bg);color:var(--fg);font:500 14px/1 system-ui,-apple-system,'PingFang TC','Microsoft JhengHei',sans-serif;" +
-      "cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.18);transition:transform .15s}" +
-      ".btn:hover{transform:translateY(-1px)}" +
-      ".btn svg{width:18px;height:18px}" +
+      ".btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;width:56px;height:56px;padding:0;" +
+      "border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--fg);" +
+      "font:500 10px/1 system-ui,-apple-system,'PingFang TC','Microsoft JhengHei',sans-serif;" +
+      "cursor:grab;box-shadow:0 4px 14px rgba(0,0,0,.18);touch-action:none;user-select:none;-webkit-user-select:none}" +
+      ".btn:hover{border-color:var(--muted)}" +
+      ".btn.drag{cursor:grabbing;box-shadow:0 8px 24px rgba(0,0,0,.28)}" +
+      ".btn svg{width:22px;height:22px}" +
       ".mask{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;padding:16px}" +
       ".mask.on{display:flex}" +
       ".box{position:relative;width:min(960px,100%);height:min(86vh,900px);background:var(--bg);border-radius:12px;overflow:hidden;" +
@@ -71,8 +74,52 @@
       var vars = dark
         ? "--bg:#171a21;--fg:#e5e7eb;--muted:#9ca3af;--line:#2a2f3a"
         : "--bg:#ffffff;--fg:#1d2129;--muted:#6b7280;--line:#e5e7eb";
-      host.style.cssText = host.style.cssText.replace(/--[^;]+;?/g, "") + vars;
+      host.dataset.vars = vars;
+      applyStyle();
     }
+    // 位置：預設在右下 / 左下；拖曳後改用 left/top，記在這個瀏覽器（localStorage）
+    var POS_KEY = "cnroute-float-pos";
+    var pos = null;
+    try { pos = JSON.parse(localStorage.getItem(POS_KEY) || "null"); } catch (e) { pos = null; }
+    function clamp(p) {
+      var w = host.offsetWidth || 56, h = host.offsetHeight || 56;
+      return { x: Math.max(4, Math.min(window.innerWidth - w - 4, p.x)), y: Math.max(4, Math.min(window.innerHeight - h - 4, p.y)) };
+    }
+    function applyStyle() {
+      var css = host.dataset.base;
+      if (pos) { var c = clamp(pos); css = "position:fixed;z-index:2147483000;left:" + c.x + "px;top:" + c.y + "px;"; }
+      host.style.cssText = css + (host.dataset.vars || "");
+    }
+    window.addEventListener("resize", applyStyle);
+
+    var drag = null, moved = false;
+    btn.addEventListener("pointerdown", function (e) {
+      if (e.button !== 0) return;
+      var r = host.getBoundingClientRect();
+      drag = { sx: e.clientX, sy: e.clientY, ox: r.left, oy: r.top };
+      moved = false;
+      try { btn.setPointerCapture(e.pointerId); } catch (err) {}
+    });
+    btn.addEventListener("pointermove", function (e) {
+      if (!drag) return;
+      var dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+      if (!moved && Math.abs(dx) + Math.abs(dy) < 6) return; // 小於 6px 視為點擊
+      moved = true;
+      btn.classList.add("drag");
+      pos = { x: drag.ox + dx, y: drag.oy + dy };
+      applyStyle();
+    });
+    function endDrag() {
+      if (!drag) return;
+      drag = null;
+      btn.classList.remove("drag");
+      if (moved && pos) {
+        pos = clamp(pos);
+        try { localStorage.setItem(POS_KEY, JSON.stringify(pos)); } catch (e) {}
+      }
+    }
+    btn.addEventListener("pointerup", endDrag);
+    btn.addEventListener("pointercancel", endDrag);
     theme();
     try { new MutationObserver(theme).observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme"] }); } catch (e) {}
 
@@ -81,7 +128,10 @@
       mask.classList.add("on");
     }
     function close() { mask.classList.remove("on"); }
-    btn.addEventListener("click", open);
+    btn.addEventListener("click", function () {
+      if (moved) { moved = false; return; } // 拖曳結束不要開視窗
+      open();
+    });
     root.querySelector(".x").addEventListener("click", close);
     mask.addEventListener("click", function (e) { if (e.target === mask) close(); });
     document.addEventListener("keydown", function (e) { if (e.key === "Escape") close(); });
