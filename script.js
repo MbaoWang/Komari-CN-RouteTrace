@@ -221,7 +221,8 @@ async function runGroup(cfg, map, uuids, targets, opts) {
   const out = {};
   const done = (async () => {
     const rounds = Math.ceil(targets.length / cfg.parallel);
-    const deadline = Date.now() + Math.max(cfg.timeout, rounds * 40 + 30) * 1000;
+    // 每跳送 3 個探測，每輪約 60 秒
+    const deadline = Date.now() + Math.max(cfg.timeout, rounds * 60 + 30) * 1000;
     while (pending.size && Date.now() < deadline) {
       await sleep(5000);
       let rows = [];

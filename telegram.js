@@ -401,11 +401,13 @@ async function notifyChange(prev, node) {
   if (!cfg.tgToken || !cfg.tgNotify || !cfg.tgChats.length) return;
   const before = {};
   const key = (t) => t.label + "|" + (t.v || 4);
-  for (const t of prev.targets) before[key(t)] = (t.tags || [])[0];
+  // 只比較同一種標籤格式（有 route.chip 的結果）；插件更新後第一次檢測不會因為寫法改變而誤報
+  const lineOf = (t) => (t.route && t.route.chip ? t.route.chip + " · " + (t.route.access || "") : null);
+  for (const t of prev.targets) before[key(t)] = lineOf(t);
   const changes = [];
   for (const t of node.targets || []) {
     const a = before[key(t)];
-    const b = (t.tags || [])[0];
+    const b = lineOf(t);
     if (a && b && a !== b) changes.push(`${ISP_ICON[t.isp] || "⚪️"} ${esc(t.label)}${t.v === 6 ? " (IPv6)" : ""}：${esc(a)} → <b>${esc(b)}</b>`);
   }
   if (!changes.length) return;

@@ -508,7 +508,16 @@ function classify(hops, isp, dst, opts) {
   }
   res.handoff_delta = entry > 0 && eff[0] !== null && eff[entry] !== null ? Math.round((eff[entry] - eff[0]) * 10) / 10 : null;
   // 交接前延遲沒增加多少（例如 NTT 在美國當地就交給電信）→ 國際業者只是機房旁的一小段，不寫進標籤
-  res.transit_shown = res.intl.length > 0 && (res.handoff_delta === null || res.handoff_delta >= transitRtt);
+  // 國際業者承載了多遠：看它自己最後一跳的延遲（不是第一個三網跳點，
+  // 因為三網的海外交接點常常沒回應，第一個看到的三網跳點可能已經跨海進到國內）
+  let lastIntlIdx = -1;
+  if (res.intl.length) {
+    const lastAsn = res.intl[res.intl.length - 1].asn;
+    for (let k = entry - 1; k >= 0; k--) if (pub[k].asn === lastAsn) { lastIntlIdx = k; break; }
+  }
+  res.transit_delta = lastIntlIdx >= 0 && eff[0] !== null && eff[lastIntlIdx] !== null ? Math.round((eff[lastIntlIdx] - eff[0]) * 10) / 10 : null;
+  const carried = res.transit_delta !== null ? res.transit_delta : res.handoff_delta;
+  res.transit_shown = res.intl.length > 0 && (carried === null || carried >= transitRtt);
   const inChina = (g) => /中国|中國|香港|澳门|澳門|China|Hong ?Kong|Macau/i.test(g || "");
   if (entry >= 0) {
     for (let k = entry; k < pub.length; k++) {
@@ -520,13 +529,29 @@ function classify(hops, isp, dst, opts) {
       h.overseas = true;
     }
   }
-  // 交接地點：有地理位置時看交接點在不在中國 / 香港
+  // 骨幹推斷：AS4134 / AS4837 / AS9808 的跳點，若之後還有同一家的省網 AS（例如 4811 上海電信、17621 上海聯通、24400 上海移動），
+  // 表示它不是終點的省網，而是骨幹（例如 IPv6 的 240e:20::）。只推斷 CN2 之前的跳點，CN2 之後的交給 GIA / GT 規則判斷。
+  const BACKBONE_ASN = [4134, 4809, 23764, 4837, 9929, 10099, 9808, 58453, 58807];
+  if (entry >= 0) {
+    const firstCn2Pub = pub.findIndex((h, k) => k >= entry && h.asn === 4809);
+    const stop = firstCn2Pub >= 0 ? firstCn2Pub : pub.length;
+    for (let k = entry; k < stop; k++) {
+      const h = pub[k];
+      if (h.bb || h.dst || ![4134, 4837, 9808].includes(h.asn)) continue;
+      const provAfter = pub.slice(k + 1).some((x) => x.fam === h.fam && x.asn && !BACKBONE_ASN.includes(x.asn));
+      if (provAfter) h.bb = { 4134: "163", 4837: "169", 9808: "cmnet" }[h.asn];
+    }
+  }
+  // 交接地點：看國際業者最後一跳（沒有就看第一個三網跳點）的地理位置在不在中國 / 香港
   const handHop = entry > 0 ? pub[entry] : null;
-  res.handoff_overseas = !!(handHop && (handHop.overseas || (handHop.geo && !inChina(handHop.geo))));
-  if (res.intl.length && res.handoff_delta !== null) {
+  const transitHop = lastIntlIdx >= 0 ? pub[lastIntlIdx] : null;
+  const geoHop = transitHop && transitHop.geo ? transitHop : handHop;
+  res.handoff_geo_known = !!(geoHop && geoHop.geo);
+  res.handoff_overseas = !!(handHop && (handHop.overseas || (geoHop && geoHop.geo && !inChina(geoHop.geo))));
+  if (res.intl.length && carried !== null) {
     res.intl_text += res.transit_shown
-      ? `；交接前延遲增加 ${res.handoff_delta} ms（國際業者承載長距離）`
-      : `；交接前延遲只增加 ${res.handoff_delta} ms（在當地就交給三網，非直連）`;
+      ? `；國際業者承載延遲 ${carried} ms（長途承載）`
+      : `；國際業者只承載 ${carried} ms（在${res.handoff_overseas ? "海外" : "當地"}就交給三網，非直連）`;
   }
 
   if (entry < 0) {
@@ -587,9 +612,14 @@ function classify(hops, isp, dst, opts) {
       ev = "經過電信國際網 CTGNet（AS23764" + (isV6 ? "，2400:9380:axxx" : "") + "）" + (b163 > 0 ? "，入境後接 163 骨幹" : "") + "，未經 CN2";
     } else if (b163 > 0) {
       line = "電信 163";
-      const only163Overseas = core.filter(bbIs("163")).every((h) => h.overseas);
-      ev = only163Overseas ? "在海外交給電信 163 的海外節點（AS4134，例如 218.30.x），國內段沒有看到 CN2"
-        : isV6 ? "IPv6：經過 163 骨幹（240e:0:: / 2400:9380:8xxx）" : "經過 202.97（163 骨幹）";
+      // 依實際看到的 163 跳點寫依據
+      const h163 = core.filter(bbIs("163"));
+      const seen = [];
+      if (h163.some((h) => /^202\.97\./.test(h.ip))) seen.push("202.97 骨幹");
+      if (h163.some((h) => /^240e:0+:/i.test(h.ip) || /^2400:9380:8/i.test(h.ip))) seen.push("IPv6 163 骨幹段（240e:0:: / 2400:9380:8xxx）");
+      if (h163.some((h) => h.overseas)) seen.push("163 的海外節點（AS4134，例如 218.30.x）");
+      if (!seen.length) seen.push("AS4134 骨幹（之後才交給當地電信省網）");
+      ev = "經過" + seen.join("、") + "，沒有看到 CN2";
     } else if (isV6 && cnt(asnIs(4134)) >= 2) {
       line = "電信 163"; conf = "推測"; ev = "IPv6：多跳 AS4134，無 CN2";
     } else {
@@ -647,9 +677,9 @@ function classify(hops, isp, dst, opts) {
 
   // 網路名稱：ASN 加骨幹名稱，例如 4134(163)、4837(169)、9808、10099、9929、CMIN2、CMI、CTGNet、CN2 GIA
   const netName = (h) => {
-    if (h.fam === "ct") return h.asn === 23764 ? "CTGNet" : h.asn === 4809 ? "CN2" : h.bb === "163" ? "4134(163)" : "電信省網";
-    if (h.fam === "cu") return h.asn === 9929 ? "9929" : h.asn === 10099 ? "10099" : h.bb === "169" ? "4837(169)" : "聯通省網";
-    if (h.fam === "cm") return h.asn === 58807 ? "CMIN2" : h.asn === 58453 ? "CMI" : h.bb === "cmnet" ? "9808" : "移動省網";
+    if (h.fam === "ct") return h.asn === 23764 ? "CTGNet" : h.asn === 4809 ? "CN2" : h.bb === "163" ? "4134(163)" : h.asn === 4134 ? "4134" : "電信省網";
+    if (h.fam === "cu") return h.asn === 9929 ? "9929" : h.asn === 10099 ? "10099" : h.bb === "169" ? "4837(169)" : h.asn === 4837 ? "4837" : "聯通省網";
+    if (h.fam === "cm") return h.asn === 58807 ? "CMIN2" : h.asn === 58453 ? "CMI" : h.asn === 9808 || h.bb === "cmnet" ? "9808" : "移動省網";
     return null;
   };
   const tail = pub.slice(entry);
@@ -662,16 +692,17 @@ function classify(hops, isp, dst, opts) {
     let name = netName(h);
     if (!name) continue;
     // 骨幹之前的 AS4134 / AS4837 / AS9808 也是骨幹（例如海外節點），之後的才是交給省網
-    if (/省網$/.test(name) && lastBB[h.fam] !== undefined && k < lastBB[h.fam]) {
+    if ((/省網$/.test(name) || /^(4134|4837)$/.test(name)) && lastBB[h.fam] !== undefined && k < lastBB[h.fam]) {
       name = { 4134: "4134(163)", 4837: "4837(169)", 9808: "9808" }[h.asn] || name;
     }
-    if (name === "CN2" && /^CN2/.test(res.short)) name = res.short; // CN2 GIA / CN2 GT
+    if (/^CN2/.test(res.short) && h.fam === "ct" && !/省網$/.test(name)) name = res.short; // 只寫 CN2 GIA / CN2 GT
     const prev = items[items.length - 1];
     if (prev && prev.name === name) continue;
     items.push({ fam: h.fam, name });
   }
   // 同一家的骨幹之後交給自家省網是正常的收尾，不寫出來
-  while (items.length > 1 && /省網$/.test(items[items.length - 1].name) && items[items.length - 2].fam === items[items.length - 1].fam &&
+  const isEndNet = (n) => /省網$/.test(n) || /^(4134|4837|9808)$/.test(n);
+  while (items.length > 1 && isEndNet(items[items.length - 1].name) && items[items.length - 2].fam === items[items.length - 1].fam &&
     !/省網$/.test(items[items.length - 2].name)) items.pop();
   const netsFull = items.map((it) => it.name);
   // 第一行：移動的國際網（CMI / CMIN2）入境後一定接 9808，目標也是移動時省略最後的 9808
@@ -685,7 +716,7 @@ function classify(hops, isp, dst, opts) {
   let showTransit = false;
   if (!last) { res.connect = "direct"; res.access = "直連"; }
   else if (res.transit_shown) { res.connect = "long_haul"; res.access = "長途承載"; showTransit = true; }
-  else if (!res.handoff_overseas && (handHop && (handHop.geo || pub[entry - 1].geo))) {
+  else if (!res.handoff_overseas && res.handoff_geo_known) {
     res.connect = "local_transit"; res.access = "當地交接"; showTransit = true;
   } else { res.connect = "overseas_transit"; res.access = `經 ${res.handover} 海外交接`; }
 
