@@ -183,7 +183,7 @@ Komari 主機連不到 Telegram 時，可在「Telegram API 位址」填自建�
 ## 字體
 
 - 從首頁浮動按鈕打開時，結果頁直接沿用 Komari 面板主題實際使用的字體與字型檔，換主題也會一致
-- 直接開結果頁網址時，使用與 [Komari-Theme-LuminaPlus](https://github.com/shanyang242/Komari-Theme-LuminaPlus) 完全相同的字體順序與文字渲染設定：
+- 直接開結果頁網址時，參考 [Komari-Theme-LuminaPlus](https://github.com/shanyang242/Komari-Theme-LuminaPlus) 字體順序與文字渲染設定：
   英數字為 [Inter](https://github.com/rsms/inter)（Inter Variable，隨插件打包在 `page/fonts/`，SIL Open Font License 1.1），中文依序為蘋方 / 冬青黑體 / 微軟雅黑
 
 ## 授權
