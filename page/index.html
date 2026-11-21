@@ -75,11 +75,11 @@
   button[disabled] { opacity: .5; cursor: default; }
   .empty { color: var(--muted); padding: 24px; text-align: center; }
   .nhead { padding: 12px 14px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  .grid { display: grid; grid-template-columns: 64px repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--line); }
+  .grid { display: grid; grid-template-columns: fit-content(120px) repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--line); }
   .grid > div { padding: 8px 10px; border-bottom: 1px solid var(--line); min-width: 0; }
   .grid .gh { color: var(--muted); font-size: 12px; padding-top: 6px; padding-bottom: 6px; }
   .grid .gh.ct { color: var(--ct); } .grid .gh.cu { color: var(--cu); } .grid .gh.cm { color: var(--cm); }
-  .grid .rg { font-weight: 600; display: flex; align-items: center; }
+  .grid .rg { font-weight: 600; display: flex; align-items: center; overflow-wrap: anywhere; min-width: 64px; box-sizing: border-box; }
   .grid .other { grid-column: 2 / -1; }
   .cell { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; text-align: left;
     border: 1px solid transparent; background: transparent; padding: 4px 6px; border-radius: 6px; cursor: pointer; font: inherit; color: inherit; }
@@ -93,8 +93,9 @@
   .detail .dh { padding: 10px 14px 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .detail .aspath { padding: 4px 14px 0; display: block; }
   @media (max-width: 640px) {
-    .grid { grid-template-columns: 44px repeat(3, minmax(0, 1fr)); }
+    .grid { grid-template-columns: fit-content(76px) repeat(3, minmax(0, 1fr)); }
     .grid > div { padding: 6px 4px; }
+    .grid .rg { min-width: 44px; }
     .cell { padding: 3px 4px; }
     .cell .chip { font-size: 11px; padding: 1px 6px; }
   }
@@ -116,12 +117,13 @@
 <body>
 <header>
   <div>
-    <h1>回程路由檢測</h1>
-    <div class="sub" id="sub">載入中…</div>
+    <h1 id="title"></h1>
+    <div class="sub" id="sub">…</div>
   </div>
   <div id="actions"></div>
 </header>
 <main id="list"></main>
+<script src="i18n.js"></script>
 <script>
 // 在 Komari 的彈出視窗裡時（同網域），沿用面板主題實際的字體與 @font-face，換主題也會一致
 (function inheritThemeFont() {
@@ -159,14 +161,38 @@
 })();
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const ago = (iso) => {
-  if (!iso) return "尚未檢測";
-  const s = Math.round((Date.now() - new Date(iso)) / 1000);
-  if (s < 60) return s + " 秒前";
-  if (s < 3600) return Math.round(s / 60) + " 分鐘前";
-  if (s < 86400) return Math.round(s / 3600) + " 小時前";
-  return new Date(iso).toLocaleString();
-};
+
+// ---------- 語系：跟隨 Komari 面板 ----------
+// komari-web 把語言存在 localStorage / cookie 的 "language"（zh-TW、zh-CN、en-US、ja-JP…），
+// 並設定 <html lang>；在面板的彈出視窗裡時也看父頁面。都沒有時用瀏覽器語言。
+const I = window.CNI18N;
+function detectLang() {
+  const tries = [];
+  try { tries.push(localStorage.getItem("language")); } catch (_) {}
+  try { const m = document.cookie.match(/(?:^|;\s*)language=([^;]+)/); if (m) tries.push(decodeURIComponent(m[1])); } catch (_) {}
+  try { if (window.parent !== window) tries.push(window.parent.document.documentElement.lang); } catch (_) {}
+  tries.push(...(navigator.languages || []), navigator.language);
+  for (const x of tries) { const l = x && I.resolve(x); if (l) return l; }
+  return "en";
+}
+let L = detectLang();
+const T = (k, p) => I.t(L, k, p);
+function applyLang() {
+  document.documentElement.lang = L === "zh-TW" ? "zh-Hant" : L === "zh-CN" ? "zh-Hans" : L;
+  document.title = T("page.title");
+  document.getElementById("title").textContent = T("page.title");
+}
+applyLang();
+// 面板切換語言時跟著換（同網域的其他分頁 / 父頁面改了 localStorage）
+function relang() {
+  const n = detectLang();
+  if (n === L) return;
+  L = n;
+  applyLang();
+  if (lastData) render(lastData);
+}
+window.addEventListener("storage", (e) => { if (!e.key || e.key === "language") relang(); });
+
 // 顏色一律依目標所屬的電信商（欄位）：電信藍、聯通紅、移動綠；沒有電信商的自訂目標用中性色
 const ispColor = (t) => (["ct", "cu", "cm"].includes(t.isp) ? t.isp : "");
 let isAdmin = false;
@@ -176,89 +202,99 @@ if (EMBED) document.documentElement.classList.add("embed");
 let lastData = null;
 let ver = 4;
 try { ver = Number(localStorage.getItem("cnroute-ver")) === 6 ? 6 : 4; } catch (_) {}
-const CONF = { 確認: "", 推測: "（推測）", 不足: "（證據不足）" };
-const tagText = (t) => ((t.tags || [])[0] || "") + (t.route ? CONF[t.route.confidence] || "" : "");
+const confText = (t) => (t.route ? I.confText(L, t.route.confidence) : "");
+const tagText = (t) => {
+  const base = t.route ? I.label(L, t.route) || (t.tags || [])[0] || "" : (t.tags || [])[0] || "";
+  const c = confText(t);
+  return base + I.paren(L, c);
+};
 // 格子第一行：怎麼交接進中國（例如 4134(163)、Lumen → CMI、CTGNet → 4134(163) → 4837(169)）
 const cellMain = (t) => {
   const r = t.route || {};
-  if (r.chip) return r.chip;
+  const c = I.chip(L, r);
+  if (c) return c;
   return r.short ? (r.cross_text ? r.carrier_name + " " : "") + r.short : tagText(t); // 舊版結果
 };
 // 格子第二行：完整走法（所有國際業者 + 經過的網路）；和第一行一樣時不顯示
 const cellChain = (t) => {
   const r = t.route || {};
-  const full = r.chain_full_text || "";
+  const full = r.chain_full ? I.chain(L, r.chain_full) : r.chain_full_text || "";
   return full && full !== cellMain(t) ? full : "";
 };
 // 格子小字：接入方式 · 延遲 · 推測 / 未到達
 const cellMeta = (t) => {
   const r = t.route || {};
-  return [r.access, t.last_rtt != null ? t.last_rtt + " ms" : "",
-    r.confidence === "推測" ? "推測" : r.confidence === "不足" ? "證據不足" : "",
-    t.reached === false ? "未到達" : ""].filter(Boolean).join(" · ");
+  return [I.access(L, r) || r.access, t.last_rtt != null ? t.last_rtt + " ms" : "", confText(t),
+    t.reached === false ? T("unreached") : ""].filter(Boolean).join(" · ");
 };
 
-const ISP_COLS = [["ct", "電信"], ["cu", "聯通"], ["cm", "移動"]];
+const ISP_COLS = ["ct", "cu", "cm"];
 const openCell = {}; // 每台伺服器目前展開的目標 key
+const tLabel = (t) => I.targetLabel(L, t);
 
-// 「北京電信」→ 地區「北京」；沒有電信商字樣的自訂目標放在「其他」列
+// 地區：新版結果有省份代碼；舊版從「北京電信」推回「北京」；沒有電信商的自訂目標放在「其他」列
 function regionOf(t) {
+  if (t.region) return t.region;
   const r = String(t.label || "").replace(/(電信|电信|聯通|联通|移動|移动)$/, "").trim();
   return t.isp && r && r !== t.label ? r : "";
 }
+const regionName = (r) => (I.PROVINCES[r] ? I.province(L, r) : r);
 
 function cellHTML(n, t, key) {
   if (!t) return `<div><span class="cell none">—</span></div>`;
   const rtt = t.last_rtt != null ? `${t.last_rtt} ms` : "";
   const body = t.error
-    ? `<span class="chip ${ispColor(t)}">⚠ ${esc(t.error)}</span>`
+    ? `<span class="chip ${ispColor(t)}">⚠ ${esc(I.error(L, t.error))}</span>`
     : `<span class="chip ${ispColor(t)}">${esc(cellMain(t) || "—")}</span>
        ${cellChain(t) ? `<span class="chain">${esc(cellChain(t))}</span>` : ""}
-       <span class="meta">${esc(t.route && t.route.short ? cellMeta(t) : rtt + (t.reached === false ? " · 未到達" : ""))}</span>`;
-  return `<div><button class="cell ${openCell[n.uuid] === key ? "on" : ""}" data-node="${esc(n.uuid)}" data-key="${esc(key)}" title="${esc(t.label)}">${body}</button></div>`;
+       <span class="meta">${esc(t.route && (t.route.short || t.route.chain) ? cellMeta(t) : rtt + (t.reached === false ? " · " + T("unreached") : ""))}</span>`;
+  return `<div><button class="cell ${openCell[n.uuid] === key ? "on" : ""}" data-node="${esc(n.uuid)}" data-key="${esc(key)}" title="${esc(tLabel(t))}">${body}</button></div>`;
 }
 
 function detailHTML(t) {
-  const segs = (t.segments || []).map((s) => `
+  const segs = (t.segments || []).map((s) => {
+    const ips = (s.ips || []).map((x) => (x === "LAN" || x === "內網" ? T("seg.lanIp") : x));
+    return `
     <div class="seg ${s.key === "LAN" ? "lan" : ""}">
-      <div class="asn">${esc(s.key === "LAN" ? "LAN" : s.key)}</div>
-      <div><div>${esc(s.name || "")}${s.geo ? ` <span class="sub">· ${esc(s.geo)}</span>` : ""}</div>
-        ${s.ips && s.ips.length ? `<div class="ips">${s.ips.map(esc).join("　")}</div>` : ""}</div>
-      <div class="hopn">${s.hops} 跳${s.timeouts ? ` +${s.timeouts}*` : ""}${s.rtt_out != null ? ` · ${s.rtt_out} ms` : ""}</div>
-    </div>`).join("");
+      <div class="asn">${esc(s.key)}</div>
+      <div><div>${esc(I.segName(L, s))}${s.geo ? ` <span class="sub">· ${esc(s.geo)}</span>` : ""}</div>
+        ${ips.length ? `<div class="ips">${ips.map(esc).join("　")}</div>` : ""}</div>
+      <div class="hopn">${esc(T("page.hops", { n: s.hops }))}${s.timeouts ? ` +${s.timeouts}*` : ""}${s.rtt_out != null ? ` · ${s.rtt_out} ms` : ""}</div>
+    </div>`;
+  }).join("");
   const why = t.route ? `<div class="why">
-      <div><b>判斷依據</b>　${esc(t.route.evidence || "—")}</div>
-      <div><b>國際段</b>　${esc(t.route.intl_text || "—")}</div>
+      <div><b>${esc(T("page.why"))}</b>　${esc(I.evidence(L, t.route) || "—")}</div>
+      <div><b>${esc(T("page.intl"))}</b>　${esc(I.intl(L, t.route) || "—")}</div>
     </div>` : "";
   return `<div class="detail">
-    <div class="dh"><span class="label ${esc(t.isp)}">${esc(t.label)}</span>
+    <div class="dh"><span class="label ${esc(t.isp)}">${esc(tLabel(t))}</span>
       ${t.error ? "" : `<span class="chip ${ispColor(t)}">${esc(tagText(t))}</span>`}
       <span class="spacer"></span><span class="rtt">${t.last_rtt != null ? t.last_rtt + " ms" : ""}</span></div>
-    <span class="aspath">${esc(t.as_path || t.error || "")}</span>
-    <div class="segs">${why}${segs || '<div class="sub">沒有資料</div>'}</div>
+    <span class="aspath">${esc(t.as_path || I.error(L, t.error) || "")}</span>
+    <div class="segs">${why}${segs || `<div class="sub">${esc(T("page.noData"))}</div>`}</div>
   </div>`;
 }
 
 function nodeGrid(n, targets) {
-  if (!targets.length) return '<div class="empty">尚無結果</div>';
+  if (!targets.length) return `<div class="empty">${esc(T("page.noResult"))}</div>`;
   const regions = [];
   const byRegion = {};
   const others = [];
-  targets.forEach((t, i) => {
+  targets.forEach((t) => {
     const key = "v" + ver + ":" + t.label + ":" + t.ip;
     const r = regionOf(t);
     if (!r) { others.push([t, key]); return; }
     if (!byRegion[r]) { byRegion[r] = {}; regions.push(r); }
     byRegion[r][t.isp] = [t, key];
   });
-  let html = `<div class="grid"><div class="gh"></div>${ISP_COLS.map(([c, name]) => `<div class="gh ${c}">${name}</div>`).join("")}`;
+  let html = `<div class="grid"><div class="gh"></div>${ISP_COLS.map((c) => `<div class="gh ${c}">${esc(T("carrier." + c))}</div>`).join("")}`;
   for (const r of regions) {
-    html += `<div class="rg">${esc(r)}</div>` + ISP_COLS.map(([c]) => {
+    html += `<div class="rg">${esc(regionName(r))}</div>` + ISP_COLS.map((c) => {
       const hit = byRegion[r][c];
       return hit ? cellHTML(n, hit[0], hit[1]) : cellHTML(n, null);
     }).join("");
   }
-  for (const [t, key] of others) html += `<div class="rg">其他</div><div class="other">${cellHTML(n, t, key).slice(5, -6)}</div>`;
+  for (const [t, key] of others) html += `<div class="rg">${esc(T("page.other"))}</div><div class="other">${cellHTML(n, t, key).slice(5, -6)}</div>`;
   html += "</div>";
   const open = targets.find((t) => "v" + ver + ":" + t.label + ":" + t.ip === openCell[n.uuid]);
   return html + (open ? detailHTML(open) : "");
@@ -266,7 +302,7 @@ function nodeGrid(n, targets) {
 
 function render(data) {
   isAdmin = !!data.admin && !EMBED;
-  document.getElementById("sub").textContent = `每 ${data.interval} 分鐘自動檢測 · 點擊線路查看每個 AS 的詳細路徑`;
+  document.getElementById("sub").textContent = T("page.sub", { n: data.interval });
   lastData = data;
   // 伺服器有被選入哪些版本（舊版 API 沒有 versions 時，從結果推回）
   const versOf = (n) => n.versions || [...new Set((n.targets || []).map((t) => t.v || 4))];
@@ -274,11 +310,11 @@ function render(data) {
   const hasV6 = data.nodes.some((n) => versOf(n).includes(6));
   if (!hasV6) ver = 4; else if (!hasV4) ver = 6;
   const toggle = hasV4 && hasV6 ? `<span class="seg-ctl"><button data-ver="4" class="${ver === 4 ? "on" : ""}">IPv4</button><button data-ver="6" class="${ver === 6 ? "on" : ""}">IPv6</button></span>` : "";
-  document.getElementById("actions").innerHTML = toggle + (isAdmin ? `<button id="runall">全部立即檢測</button>` : "");
+  document.getElementById("actions").innerHTML = toggle + (isAdmin ? `<button id="runall">${esc(T("page.runAll"))}</button>` : "");
   const list = document.getElementById("list");
   // 只列出有被選入目前分頁版本的伺服器
   const nodes = data.nodes.filter((n) => versOf(n).includes(ver));
-  if (!nodes.length) { list.innerHTML = `<div class="empty">沒有伺服器啟用 IPv${ver} 檢測</div>`; return; }
+  if (!nodes.length) { list.innerHTML = `<div class="empty">${esc(T("page.noNodes", { v: ver }))}</div>`; return; }
   list.innerHTML = nodes.map((n) => {
     const targets = (n.targets || []).filter((t) => (t.v || 4) === ver);
     const src = ver === 6 ? n.src6_masked : n.src_masked;
@@ -287,23 +323,26 @@ function render(data) {
         <span class="name">${esc(n.name)}</span>
         ${src ? `<span class="ip">${esc(src)}</span>` : ""}
         <span class="spacer"></span>
-        <span class="sub">${n.running ? "檢測中…" : esc(ago(n.updated_at))}${n.tool ? " · " + esc(n.tool) : ""}</span>
-        ${isAdmin ? `<button data-run="${esc(n.uuid)}" ${n.running ? "disabled" : ""}>立即檢測</button>` : ""}
+        <span class="sub">${esc(n.running ? T("page.running") : I.ago(L, n.updated_at))}${n.tool ? " · " + esc(n.tool) : ""}</span>
+        ${isAdmin ? `<button data-run="${esc(n.uuid)}" ${n.running ? "disabled" : ""}>${esc(T("page.run"))}</button>` : ""}
       </div>
-      ${n.error ? `<div class="err">${esc(n.error)}</div>` : ""}
+      ${n.error ? `<div class="err">${esc(I.error(L, n.error))}</div>` : ""}
       ${nodeGrid(n, targets)}
     </div>`;
   }).join("");
 }
 
+const errText = (e, status) => (e ? I.error(L, e) : String(status));
+
 async function refresh() {
+  relang();
   try {
     const r = await fetch("/api/cnroute/data", { credentials: "same-origin" });
     const d = await r.json();
-    if (!r.ok) throw new Error(d.error || r.status);
+    if (!r.ok) throw new Error(errText(d.error, r.status));
     render(d);
   } catch (e) {
-    document.getElementById("sub").textContent = "讀取失敗：" + e.message;
+    document.getElementById("sub").textContent = T("page.loadFail", { x: e.message });
   }
 }
 
@@ -311,7 +350,7 @@ async function run(uuid) {
   const q = uuid ? "?uuid=" + encodeURIComponent(uuid) : "";
   const r = await fetch("/api/cnroute/run" + q, { method: "POST", credentials: "same-origin" });
   const d = await r.json().catch(() => ({}));
-  if (!r.ok || d.error) alert("觸發失敗：" + (d.error || r.status));
+  if (!r.ok || d.error) alert(T("page.runFail", { x: errText(d.error, r.status) }));
   refresh();
 }
 

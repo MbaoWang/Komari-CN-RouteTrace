@@ -93,6 +93,7 @@ async function getCfg() {
     tgChats: String(c.tg_chat_ids || "").split(/[\s,，]+/).map((x) => x.trim()).filter(Boolean),
     tgApi: String(c.tg_api_base || "https://api.telegram.org").trim().replace(/\/+$/, ""),
     tgNotify: c.tg_notify_change !== false,
+    tgDefaultLang: c.tg_default_lang || "zh-TW",
     tgAllowCustom: c.tg_allow_custom !== false,
   };
 }
@@ -124,13 +125,15 @@ function buildNodeResult(client, cfg, output, exitCode, targets) {
     src6_masked: lib.maskIP(client.ipv6, cfg.maskMode),
     updated_at: new Date().toISOString(),
     tool: parsed.tool,
-    error: parsed.error || (exitCode !== 0 && !Object.keys(parsed.blocks).length ? `執行失敗 (exit ${exitCode})：${String(output || "").slice(0, 300)}` : ""),
+    // 錯誤存成代碼（{k, p}），顯示時依語系產生文字
+    error: parsed.error ? { k: parsed.error.split(" ")[0] } : (exitCode !== 0 && !Object.keys(parsed.blocks).length ? { k: "exec", p: { code: exitCode, x: String(output || "").slice(0, 300) } } : ""),
     targets: [],
   };
   for (const t of targets) {
     const b = parsed.blocks[t.id];
     const v = t.v || (t.ip.includes(":") ? 6 : 4);
-    if (!b || b.note) { node.targets.push({ label: t.label, v, isp: t.isp, ip: t.ip, error: b ? b.note : "沒有結果", segments: [], tags: [] }); continue; }
+    const noteErr = (note) => { const [k, ...rest] = String(note).split(" "); return k === "resolve" ? { k, p: { x: rest.join(" ") } } : { k }; };
+    if (!b || b.note) { node.targets.push({ label: t.label, region: t.region || "", custom: t.custom || "", v, isp: t.isp, ip: t.ip, error: b ? noteErr(b.note) : { k: "noResult" }, segments: [], tags: [] }); continue; }
     const src = v === 6 ? client.ipv6 : client.ipv4;
     const comp = lib.compressPath(b.hops, { maskMode: cfg.maskMode, maskFirstAS: cfg.maskFirstAS, srcIP: src });
     // 網域目標以伺服器解析出的 IP 判斷是否到達
@@ -140,6 +143,8 @@ function buildNodeResult(client, cfg, output, exitCode, targets) {
     const reached = b.hops.some((h) => h.ip === dstIP);
     node.targets.push({
       label: t.label,
+      region: t.region || "",
+      custom: t.custom || "",
       v,
       isp: t.isp,
       ip: t.ip,
@@ -148,7 +153,7 @@ function buildNodeResult(client, cfg, output, exitCode, targets) {
       hop_count: b.hops.length,
       last_rtt: comp.last_rtt,
       tags: cls.tags,
-      route: { line: cls.line, carrier: cls.carrier, cross: cls.cross, confidence: cls.confidence, evidence: cls.evidence, intl: cls.intl, intl_text: cls.intl_text, handoff_delta: cls.handoff_delta, transit_shown: cls.transit_shown,
+      route: { line: cls.line, carrier: cls.carrier, cross: cls.cross, confidence: cls.confidence, ev: cls.ev || [], intl: cls.intl, intl_note: cls.intl_note || null, cross_to: cls.cross_to || "", handover: cls.handover || "", handoff_delta: cls.handoff_delta, transit_shown: cls.transit_shown,
         short: cls.short, access: cls.access, carrier_name: cls.carrier_name, cross_text: cls.cross_text || "", connect: cls.connect || "",
         chain: cls.chain || [], chain_text: cls.chain_text || "", chain_full: cls.chain_full || [], chain_full_text: cls.chain_full_text || "", chip: cls.chip || "" },
       as_path: comp.segments.filter((s) => s.key !== "LAN").map((s) => s.key).join(" → "),
@@ -200,7 +205,7 @@ async function probe(uuids, opts) {
   }
   const done = Promise.all(dones).then((list) => Object.assign({}, ...list));
   if (!started.length && !errors.length && uuids.length && !Object.keys(groups).length) {
-    errors.push("這台伺服器沒有被選入 IPv4 或 IPv6 檢測（請到插件設定選擇伺服器）");
+    errors.push({ k: "notSelected" });
   }
   return { started, busy, error: errors[0], done };
 }
@@ -244,7 +249,7 @@ async function runGroup(cfg, map, uuids, targets, opts) {
     }
     for (const u of pending) {
       delete running[u];
-      const err = "等待結果逾時（agent 離線、未開放遠端執行，或探測時間過長）";
+      const err = { k: "timeout" };
       out[u] = { uuid: u, name: map[u].name, targets: [], error: err, updated_at: new Date().toISOString() };
       if (store) {
         const prev = results[u] || { uuid: u, name: map[u].name, targets: [] };
@@ -285,7 +290,7 @@ function load() {
     try {
       const cfg = await getCfg();
       const admin = isAdmin(req);
-      if (!cfg.publicData && !admin) return json(res, 403, { error: "需要登入" });
+      if (!cfg.publicData && !admin) return json(res, 403, { error: { k: "login" } });
       const clients = await listClients();
       const allowed = await selectedNodes(cfg);
       const nodes = clients
@@ -323,7 +328,7 @@ function load() {
   server.injectHTML("", "<script>" + floatSafe + "</script>");
 
   server.route("POST", "/api/cnroute/run", async (req, res) => {
-    if (!isAdmin(req)) return json(res, 403, { error: "僅管理員可觸發" });
+    if (!isAdmin(req)) return json(res, 403, { error: { k: "adminOnly" } });
     try {
       const cfg = await getCfg();
       const want = await selectedNodes(cfg);

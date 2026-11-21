@@ -2,16 +2,18 @@
   "name": {
     "zh_TW": "回程路由檢測",
     "zh_CN": "回程路由检测",
-    "en": "CN Return Route"
+    "en": "CN Return Route",
+    "ja": "中国帰路ルート"
   },
   "short": "cnroute",
   "description": {
     "zh_TW": "定時在各伺服器上追蹤回程到中國電信 / 聯通 / 移動的路徑，按 AS 壓縮顯示並判斷 CN2 GIA / GT、9929、CMIN2 等線路；本機 IP 自動遮罩。",
     "zh_CN": "定时在各服务器上追踪回程到中国电信 / 联通 / 移动的路径，按 AS 压缩显示并判断 CN2 GIA / GT、9929、CMIN2 等线路；本机 IP 自动打码。",
-    "en": "Traces return routes from every server to China Telecom / Unicom / Mobile, collapses hops per AS and detects CN2 GIA / GT, 9929, CMIN2. Server IPs are masked."
+    "en": "Traces return routes from every server to China Telecom / Unicom / Mobile, collapses hops per AS and detects CN2 GIA / GT, 9929, CMIN2. Server IPs are masked.",
+    "ja": "各サーバーから中国電信 / 聯通 / 移動への帰路を定期的にトレースし、AS ごとにまとめて CN2 GIA / GT、9929、CMIN2 などの回線を判定します。サーバー IP は自動でマスクされます。"
   },
   "author": "MbaoWang",
-  "version": "1.12.0",
+  "version": "1.13.0",
   "entry": "script.js",
   "permissions": {
     "node": true,
@@ -26,7 +28,8 @@
       "title": {
         "zh_TW": "回程路由",
         "zh_CN": "回程路由",
-        "en": "Return Route"
+        "en": "Return Route",
+        "ja": "帰路ルート"
       },
       "visibility": "public"
     },
@@ -35,7 +38,8 @@
       "title": {
         "zh_TW": "回程路由",
         "zh_CN": "回程路由",
-        "en": "Return Route"
+        "en": "Return Route",
+        "ja": "帰路ルート"
       },
       "visibility": "admin"
     }
@@ -45,207 +49,455 @@
     "data": [
       {
         "key": "v4_title",
-        "name": "IPv4 檢測",
+        "name": {
+          "zh_TW": "IPv4 檢測",
+          "zh_CN": "IPv4 检测",
+          "en": "IPv4 checks",
+          "ja": "IPv4 検査"
+        },
         "type": "title"
       },
       {
         "key": "v4_enabled",
-        "name": "啟用 IPv4 回程檢測",
+        "name": {
+          "zh_TW": "啟用 IPv4 回程檢測",
+          "zh_CN": "启用 IPv4 回程检测",
+          "en": "Enable IPv4 return route checks",
+          "ja": "IPv4 帰路検査を有効にする"
+        },
         "type": "switch",
         "default": true
       },
       {
         "key": "nodes",
-        "name": "IPv4 檢測的伺服器（不選 = 全部）",
+        "name": {
+          "zh_TW": "IPv4 檢測的伺服器（不選 = 全部）",
+          "zh_CN": "IPv4 检测的服务器（不选 = 全部）",
+          "en": "Servers for IPv4 checks (none selected = all)",
+          "ja": "IPv4 検査するサーバー（未選択 = すべて）"
+        },
         "type": "nodes"
       },
       {
         "key": "v4_source",
-        "name": "IPv4 目標來源",
+        "name": {
+          "zh_TW": "IPv4 目標來源",
+          "zh_CN": "IPv4 目标来源",
+          "en": "IPv4 target source",
+          "ja": "IPv4 ターゲットの種類"
+        },
         "type": "select",
         "options": "zstatic,custom",
         "default": "zstatic",
-        "help": "zstatic: Zstatic CDN 各省三網節點（開放 TCP 80，追蹤一定能到達終點）　custom: 使用下方自訂目標"
+        "help": {
+          "zh_TW": "zstatic: Zstatic CDN 各省三網節點（開放 TCP 80，追蹤一定能到達終點）　custom: 使用下方自訂目標",
+          "zh_CN": "zstatic: Zstatic CDN 各省三网节点（开放 TCP 80，追踪一定能到达终点）　custom: 使用下方自定义目标",
+          "en": "zstatic: Zstatic CDN Telecom / Unicom / Mobile nodes in each province (TCP 80 open, so traces always reach the end)　custom: use the custom targets below",
+          "ja": "zstatic: Zstatic CDN の各省三大キャリアノード（TCP 80 が開いているので必ず終点に到達）　custom: 下のカスタムターゲットを使用"
+        }
       },
       {
         "key": "zstatic_provinces",
-        "name": "Zstatic 省份（IPv4 / IPv6 共用，逗號分隔，或填「全部」）",
+        "name": {
+          "zh_TW": "Zstatic 省份（IPv4 / IPv6 共用，逗號分隔，或填「全部」）",
+          "zh_CN": "Zstatic 省份（IPv4 / IPv6 共用，逗号分隔，或填「全部」）",
+          "en": "Zstatic provinces (shared by IPv4 / IPv6, comma separated, or \"all\")",
+          "ja": "Zstatic の省（IPv4 / IPv6 共通、カンマ区切り、または「all」）"
+        },
         "type": "string",
         "default": "北京,上海,廣東",
-        "help": "可填省份名稱或代碼，例如：北京,上海,廣東,四川 或 bj,sh,gd,sc。每個省份會測電信 / 聯通 / 移動三個節點；填「全部」= 31 省 93 個目標，一輪檢測需要較久"
+        "help": {
+          "zh_TW": "可填省份名稱或代碼，例如：北京,上海,廣東,四川 或 bj,sh,gd,sc。每個省份會測電信 / 聯通 / 移動三個節點；填「全部」= 31 省 93 個目標，一輪檢測需要較久",
+          "zh_CN": "可填省份名称或代码，例如：北京,上海,广东,四川 或 bj,sh,gd,sc。每个省份会测电信 / 联通 / 移动三个节点；填「全部」= 31 省 93 个目标，一轮检测需要较久",
+          "en": "Province names or codes, e.g. Beijing,Shanghai,Guangdong,Sichuan or bj,sh,gd,sc. Each province tests Telecom / Unicom / Mobile; \"all\" = 31 provinces, 93 targets, so a round takes longer",
+          "ja": "省名またはコード（例：北京,上海,广东,四川 / Beijing,Guangdong / bj,sh,gd,sc）。各省で電信 / 聯通 / 移動の 3 ノードを検査；「all」= 31 省 93 ターゲットで 1 回の検査に時間がかかります"
+        }
       },
       {
         "key": "targets",
-        "name": "IPv4 自訂目標（每行：名稱,IP 或網域,ct|cu|cm[,port]）",
+        "name": {
+          "zh_TW": "IPv4 自訂目標（每行：名稱,IP 或網域,ct|cu|cm[,port]）",
+          "zh_CN": "IPv4 自定义目标（每行：名称,IP 或域名,ct|cu|cm[,port]）",
+          "en": "IPv4 custom targets (one per line: name,IP or domain,ct|cu|cm[,port])",
+          "ja": "IPv4 カスタムターゲット（1 行に 1 つ：名前,IP またはドメイン,ct|cu|cm[,port]）"
+        },
         "type": "textbox",
         "default": "北京電信,219.141.140.10,ct\n北京聯通,202.106.195.68,cu\n北京移動,221.179.155.161,cm\n上海電信,202.96.209.133,ct\n上海聯通,210.22.97.1,cu\n上海移動,211.136.112.200,cm\n廣州電信,58.60.188.222,ct\n廣州聯通,210.21.196.6,cu\n廣州移動,120.196.165.24,cm",
-        "help": "「IPv4 目標來源」選 custom 時才使用"
+        "help": {
+          "zh_TW": "「IPv4 目標來源」選 custom 時才使用",
+          "zh_CN": "「IPv4 目标来源」选 custom 时才使用",
+          "en": "Only used when \"IPv4 target source\" is custom",
+          "ja": "「IPv4 ターゲットの種類」が custom のときのみ使用"
+        }
       },
       {
         "key": "v6_title",
-        "name": "IPv6 檢測",
+        "name": {
+          "zh_TW": "IPv6 檢測",
+          "zh_CN": "IPv6 检测",
+          "en": "IPv6 checks",
+          "ja": "IPv6 検査"
+        },
         "type": "title"
       },
       {
         "key": "v6_enabled",
-        "name": "啟用 IPv6 回程檢測",
+        "name": {
+          "zh_TW": "啟用 IPv6 回程檢測",
+          "zh_CN": "启用 IPv6 回程检测",
+          "en": "Enable IPv6 return route checks",
+          "ja": "IPv6 帰路検査を有効にする"
+        },
         "type": "switch",
         "default": false
       },
       {
         "key": "nodes_v6",
-        "name": "IPv6 檢測的伺服器（不選 = 全部）",
+        "name": {
+          "zh_TW": "IPv6 檢測的伺服器（不選 = 全部）",
+          "zh_CN": "IPv6 检测的服务器（不选 = 全部）",
+          "en": "Servers for IPv6 checks (none selected = all)",
+          "ja": "IPv6 検査するサーバー（未選択 = すべて）"
+        },
         "type": "nodes",
-        "help": "只選有 IPv6 的伺服器；沒有 IPv6 路由的會標示「此伺服器沒有 IPv6 路由」"
+        "help": {
+          "zh_TW": "只選有 IPv6 的伺服器；沒有 IPv6 路由的會標示「此伺服器沒有 IPv6 路由」",
+          "zh_CN": "只选有 IPv6 的服务器；没有 IPv6 路由的会标示「此服务器没有 IPv6 路由」",
+          "en": "Only pick servers with IPv6; servers without an IPv6 route are marked as such",
+          "ja": "IPv6 のあるサーバーだけを選択；IPv6 経路がないサーバーはその旨を表示"
+        }
       },
       {
         "key": "v6_source",
-        "name": "IPv6 目標來源",
+        "name": {
+          "zh_TW": "IPv6 目標來源",
+          "zh_CN": "IPv6 目标来源",
+          "en": "IPv6 target source",
+          "ja": "IPv6 ターゲットの種類"
+        },
         "type": "select",
         "options": "zstatic,custom",
         "default": "zstatic",
-        "help": "zstatic: Zstatic CDN 各省三網 IPv6 節點（省份與 IPv4 共用上方「Zstatic 省份」設定）　custom: 使用下方自訂目標"
+        "help": {
+          "zh_TW": "zstatic: Zstatic CDN 各省三網 IPv6 節點（省份與 IPv4 共用上方「Zstatic 省份」設定）　custom: 使用下方自訂目標",
+          "zh_CN": "zstatic: Zstatic CDN 各省三网 IPv6 节点（省份与 IPv4 共用上方「Zstatic 省份」设置）　custom: 使用下方自定义目标",
+          "en": "zstatic: Zstatic CDN IPv6 nodes in each province (uses the \"Zstatic provinces\" setting above)　custom: use the custom targets below",
+          "ja": "zstatic: Zstatic CDN の各省 IPv6 ノード（省は上の「Zstatic の省」と共通）　custom: 下のカスタムターゲットを使用"
+        }
       },
       {
         "key": "targets_v6",
-        "name": "IPv6 自訂目標（每行：名稱,IPv6 或網域,ct|cu|cm[,port]）",
+        "name": {
+          "zh_TW": "IPv6 自訂目標（每行：名稱,IPv6 或網域,ct|cu|cm[,port]）",
+          "zh_CN": "IPv6 自定义目标（每行：名称,IPv6 或域名,ct|cu|cm[,port]）",
+          "en": "IPv6 custom targets (one per line: name,IPv6 or domain,ct|cu|cm[,port])",
+          "ja": "IPv6 カスタムターゲット（1 行に 1 つ：名前,IPv6 またはドメイン,ct|cu|cm[,port]）"
+        },
         "type": "textbox",
         "default": "北京移動,2409:8c00:8421:1303::55,cm\n上海電信,240e:e1:aa00:4000::24,ct\n上海聯通,2408:80f1:21:5003::a,cu\n上海移動,2409:8c1e:75b0:3003::26,cm\n廣州電信,240e:97c:2f:3000::44,ct\n廣州聯通,2408:8756:f50:1001::c,cu\n廣州移動,2409:8c54:871:1001::12,cm",
-        "help": "「IPv6 目標來源」選 custom 時才使用"
+        "help": {
+          "zh_TW": "「IPv6 目標來源」選 custom 時才使用",
+          "zh_CN": "「IPv6 目标来源」选 custom 时才使用",
+          "en": "Only used when \"IPv6 target source\" is custom",
+          "ja": "「IPv6 ターゲットの種類」が custom のときのみ使用"
+        }
       },
       {
         "key": "common_title",
-        "name": "共用設定",
+        "name": {
+          "zh_TW": "共用設定",
+          "zh_CN": "通用设置",
+          "en": "General",
+          "ja": "共通設定"
+        },
         "type": "title"
       },
       {
         "key": "interval",
-        "name": "自動檢測間隔（分鐘，最少 5）",
+        "name": {
+          "zh_TW": "自動檢測間隔（分鐘，最少 5）",
+          "zh_CN": "自动检测间隔（分钟，最少 5）",
+          "en": "Check interval (minutes, min. 5)",
+          "ja": "自動検査の間隔（分、最小 5）"
+        },
         "type": "number",
         "default": 60
       },
       {
         "key": "tool",
-        "name": "追蹤工具",
+        "name": {
+          "zh_TW": "追蹤工具",
+          "zh_CN": "追踪工具",
+          "en": "Trace tool",
+          "ja": "トレースツール"
+        },
         "type": "select",
         "options": "auto,nexttrace,mtr,traceroute",
         "default": "auto",
-        "help": "auto 依序嘗試 nexttrace → mtr → traceroute"
+        "help": {
+          "zh_TW": "auto 依序嘗試 nexttrace → mtr → traceroute",
+          "zh_CN": "auto 依次尝试 nexttrace → mtr → traceroute",
+          "en": "auto tries nexttrace → mtr → traceroute in order",
+          "ja": "auto は nexttrace → mtr → traceroute の順に試します"
+        }
       },
       {
         "key": "trace_proto",
-        "name": "追蹤方式",
+        "name": {
+          "zh_TW": "追蹤方式",
+          "zh_CN": "追踪方式",
+          "en": "Trace protocol",
+          "ja": "トレース方式"
+        },
         "type": "select",
         "options": "auto,icmp,tcp",
         "default": "auto",
-        "help": "auto: 網域目標（Zstatic 節點）用 TCP 80、IP 目標用 ICMP　icmp / tcp: 全部固定使用。TCP 追蹤需要 root 權限（agent 預設是 root）"
+        "help": {
+          "zh_TW": "auto: 網域目標（Zstatic 節點）用 TCP 80、IP 目標用 ICMP　icmp / tcp: 全部固定使用。TCP 追蹤需要 root 權限（agent 預設是 root）",
+          "zh_CN": "auto: 域名目标（Zstatic 节点）用 TCP 80、IP 目标用 ICMP　icmp / tcp: 全部固定使用。TCP 追踪需要 root 权限（agent 默认是 root）",
+          "en": "auto: TCP 80 for domain targets (Zstatic nodes), ICMP for IP targets　icmp / tcp: always use that. TCP tracing needs root (the agent runs as root by default)",
+          "ja": "auto: ドメインターゲット（Zstatic ノード）は TCP 80、IP ターゲットは ICMP　icmp / tcp: 常にその方式。TCP トレースには root 権限が必要（agent は既定で root）"
+        }
       },
       {
         "key": "parallel",
-        "name": "同時追蹤的目標數",
+        "name": {
+          "zh_TW": "同時追蹤的目標數",
+          "zh_CN": "同时追踪的目标数",
+          "en": "Targets traced in parallel",
+          "ja": "同時にトレースするターゲット数"
+        },
         "type": "number",
         "default": 3,
-        "help": "1～10；目標多時可調高加快檢測，太高可能互相干擾"
+        "help": {
+          "zh_TW": "1～10；目標多時可調高加快檢測，太高可能互相干擾",
+          "zh_CN": "1～10；目标多时可调高加快检测，太高可能互相干扰",
+          "en": "1–10; raise it to speed up many targets, too high may cause interference",
+          "ja": "1～10；ターゲットが多いときは上げると速くなりますが、高すぎると干渉することがあります"
+        }
       },
       {
         "key": "install_nexttrace",
-        "name": "伺服器沒有 NextTrace 時自動安裝",
+        "name": {
+          "zh_TW": "伺服器沒有 NextTrace 時自動安裝",
+          "zh_CN": "服务器没有 NextTrace 时自动安装",
+          "en": "Install NextTrace automatically when missing",
+          "ja": "NextTrace がない場合は自動インストール"
+        },
         "type": "switch",
         "default": false
       },
       {
         "key": "mask_mode",
-        "name": "本機 IP 遮罩方式",
+        "name": {
+          "zh_TW": "本機 IP 遮罩方式",
+          "zh_CN": "本机 IP 打码方式",
+          "en": "Server IP masking",
+          "ja": "サーバー IP のマスク方法"
+        },
         "type": "select",
         "options": "half,one,full",
         "default": "half",
-        "help": "half: 1.2.*.*　one: 1.*.*.*　full: 全部隱藏"
+        "help": {
+          "zh_TW": "half: 1.2.*.*　one: 1.*.*.*　full: 全部隱藏",
+          "zh_CN": "half: 1.2.*.*　one: 1.*.*.*　full: 全部隐藏",
+          "en": "half: 1.2.*.*　one: 1.*.*.*　full: hide completely",
+          "ja": "half: 1.2.*.*　one: 1.*.*.*　full: すべて非表示"
+        }
       },
       {
         "key": "mask_first_as",
-        "name": "同時遮罩本機機房 AS 內的跳點 IP 與地點",
+        "name": {
+          "zh_TW": "同時遮罩本機機房 AS 內的跳點 IP 與地點",
+          "zh_CN": "同时打码本机机房 AS 内的跳点 IP 与地点",
+          "en": "Also mask hop IPs and locations inside the server's own AS",
+          "ja": "サーバー自身の AS 内のホップ IP と場所もマスク"
+        },
         "type": "switch",
         "default": true
       },
       {
         "key": "show_hop_ips",
-        "name": "在每個 AS 下顯示跳點 IP",
+        "name": {
+          "zh_TW": "在每個 AS 下顯示跳點 IP",
+          "zh_CN": "在每个 AS 下显示跳点 IP",
+          "en": "Show hop IPs under each AS",
+          "ja": "各 AS の下にホップ IP を表示"
+        },
         "type": "switch",
         "default": true
       },
       {
         "key": "public_data",
-        "name": "訪客可查看結果",
+        "name": {
+          "zh_TW": "訪客可查看結果",
+          "zh_CN": "访客可查看结果",
+          "en": "Visitors can view results",
+          "ja": "訪問者も結果を閲覧可能"
+        },
         "type": "switch",
         "default": true
       },
       {
         "key": "float_button",
-        "name": "在 Komari 首頁顯示「回程路由」浮動按鈕",
+        "name": {
+          "zh_TW": "在 Komari 首頁顯示「回程路由」浮動按鈕",
+          "zh_CN": "在 Komari 首页显示「回程路由」悬浮按钮",
+          "en": "Show the \"Return Route\" floating button on the Komari home page",
+          "ja": "Komari のトップページに「帰路ルート」フローティングボタンを表示"
+        },
         "type": "switch",
         "default": true,
-        "help": "點擊後以彈出視窗顯示結果（唯讀，不提供檢測按鈕）；需同時開啟「訪客可查看結果」訪客才看得到"
+        "help": {
+          "zh_TW": "點擊後以彈出視窗顯示結果（唯讀，不提供檢測按鈕）；需同時開啟「訪客可查看結果」訪客才看得到",
+          "zh_CN": "点击后以弹窗显示结果（只读，不提供检测按钮）；需同时开启「访客可查看结果」访客才看得到",
+          "en": "Opens the results in a popup (read only, no check buttons); visitors also need \"Visitors can view results\"",
+          "ja": "クリックでポップアップに結果を表示（閲覧のみ、検査ボタンなし）；訪問者に見せるには「訪問者も結果を閲覧可能」も必要"
+        }
       },
       {
         "key": "float_position",
-        "name": "浮動按鈕預設位置",
+        "name": {
+          "zh_TW": "浮動按鈕預設位置",
+          "zh_CN": "悬浮按钮默认位置",
+          "en": "Default floating button position",
+          "ja": "フローティングボタンの既定位置"
+        },
         "type": "select",
         "options": "right,left",
         "default": "right",
-        "help": "right: 右下角　left: 左下角；同一個角落已有其他插件的浮動按鈕（例如 UnlockTest）時，會自動排在它上方。訪客可自行拖曳，位置記在各自的瀏覽器"
+        "help": {
+          "zh_TW": "right: 右下角　left: 左下角；同一個角落已有其他插件的浮動按鈕（例如 UnlockTest）時，會自動排在它上方。訪客可自行拖曳，位置記在各自的瀏覽器",
+          "zh_CN": "right: 右下角　left: 左下角；同一个角落已有其他插件的悬浮按钮（例如 UnlockTest）时，会自动排在它上方。访客可自行拖动，位置记在各自的浏览器",
+          "en": "right: bottom right　left: bottom left; stacks above other plugins' floating buttons (e.g. UnlockTest) in the same corner. Visitors can drag it; the position is saved in their browser",
+          "ja": "right: 右下　left: 左下；同じ角に他のプラグインのボタン（UnlockTest など）があればその上に並びます。訪問者はドラッグでき、位置はブラウザに保存されます"
+        }
       },
       {
         "key": "max_hops",
-        "name": "最大跳數",
+        "name": {
+          "zh_TW": "最大跳數",
+          "zh_CN": "最大跳数",
+          "en": "Max hops",
+          "ja": "最大ホップ数"
+        },
         "type": "number",
         "default": 30
       },
       {
         "key": "timeout",
-        "name": "等待結果逾時（秒）",
+        "name": {
+          "zh_TW": "等待結果逾時（秒）",
+          "zh_CN": "等待结果超时（秒）",
+          "en": "Result timeout (seconds)",
+          "ja": "結果待ちタイムアウト（秒）"
+        },
         "type": "number",
         "default": 240
       },
       {
         "key": "transit_rtt",
-        "name": "國際業者承載延遲超過多少毫秒，算「長距離承載」",
+        "name": {
+          "zh_TW": "國際業者承載延遲超過多少毫秒，算「長距離承載」",
+          "zh_CN": "国际运营商承载延迟超过多少毫秒，算「长距离承载」",
+          "en": "Transit latency (ms) above which the international carrier counts as \"long haul\"",
+          "ja": "国際キャリアの区間遅延が何 ms を超えたら「長距離輸送」とみなすか"
+        },
         "type": "number",
         "default": 50,
-        "help": "沒超過（例如 Lumen 在香港當地交給 CMI）標成「移動 CMI（經 Lumen）」；超過（例如 NTT 從美國帶到香港才交接）標成「NTT 轉電信 163」。設 0 = 一律算長距離"
+        "help": {
+          "zh_TW": "沒超過（例如 Lumen 在香港當地交給 CMI）只寫交接業者；超過（例如 NTT 從美國帶到香港才交接）標成「長途承載」。設 0 = 一律算長距離",
+          "zh_CN": "没超过（例如 Lumen 在香港当地交给 CMI）只写交接运营商；超过（例如 NTT 从美国带到香港才交接）标成「长途承载」。设 0 = 一律算长距离",
+          "en": "Below it (e.g. Lumen hands over to CMI locally in Hong Kong) only the handoff carrier is shown; above it (e.g. NTT carries from the US to Hong Kong) it is marked \"long haul\". 0 = always long haul",
+          "ja": "これ以下（例：Lumen が香港で CMI に引き渡し）は引き渡し業者のみ表示；超える（例：NTT が米国から香港まで運ぶ）と「長距離輸送」と表示。0 = 常に長距離"
+        }
       },
       {
         "key": "tg_title",
-        "name": "Telegram 機器人",
+        "name": {
+          "zh_TW": "Telegram 機器人",
+          "zh_CN": "Telegram 机器人",
+          "en": "Telegram bot",
+          "ja": "Telegram ボット"
+        },
         "type": "title"
       },
       {
         "key": "tg_token",
-        "name": "Bot Token（向 @BotFather 取得，留空 = 停用）",
+        "name": {
+          "zh_TW": "Bot Token（向 @BotFather 取得，留空 = 停用）",
+          "zh_CN": "Bot Token（向 @BotFather 获取，留空 = 停用）",
+          "en": "Bot token (from @BotFather, empty = disabled)",
+          "ja": "Bot Token（@BotFather で取得、空欄 = 無効）"
+        },
         "type": "string",
         "default": ""
       },
       {
         "key": "tg_chat_ids",
-        "name": "允許的 Chat ID / User ID（逗號分隔）",
+        "name": {
+          "zh_TW": "允許的 Chat ID / User ID（逗號分隔）",
+          "zh_CN": "允许的 Chat ID / User ID（逗号分隔）",
+          "en": "Allowed chat IDs / user IDs (comma separated)",
+          "ja": "許可する Chat ID / User ID（カンマ区切り）"
+        },
         "type": "string",
         "default": "",
-        "help": "對機器人傳 /id 即可取得；只有這些 ID 能操作機器人"
+        "help": {
+          "zh_TW": "對機器人傳 /id 即可取得；只有這些 ID 能操作機器人",
+          "zh_CN": "对机器人发送 /id 即可获取；只有这些 ID 能操作机器人",
+          "en": "Send /id to the bot to get it; only these IDs can use the bot",
+          "ja": "ボットに /id を送ると取得できます；これらの ID だけがボットを操作できます"
+        }
       },
       {
         "key": "tg_notify_change",
-        "name": "自動檢測發現線路變更時推播",
+        "name": {
+          "zh_TW": "自動檢測發現線路變更時推播",
+          "zh_CN": "自动检测发现线路变更时推送",
+          "en": "Notify when an automatic check finds a route change",
+          "ja": "自動検査で経路の変化を検出したら通知"
+        },
         "type": "switch",
         "default": true
       },
       {
+        "key": "tg_default_lang",
+        "name": {
+          "zh_TW": "機器人預設語言",
+          "zh_CN": "机器人默认语言",
+          "en": "Bot default language",
+          "ja": "ボットの既定言語"
+        },
+        "type": "select",
+        "options": "zh-TW,zh-CN,en,ja",
+        "default": "zh-TW",
+        "help": {
+          "zh_TW": "機器人會跟隨每位 Telegram 使用者自己的語言回覆；這裡是使用者語言無法辨識、以及尚未互動過的聊天收到推播時用的語言",
+          "zh_CN": "机器人会跟随每位 Telegram 用户自己的语言回复；这里是用户语言无法识别、以及尚未互动过的聊天收到推送时用的语言",
+          "en": "The bot replies in each Telegram user's own language; this is used when it cannot be detected and for notifications to chats that have not talked to the bot yet",
+          "ja": "ボットは各 Telegram ユーザーの言語で返信します；ここは言語を判別できない場合と、まだやり取りのないチャットへの通知に使う言語です"
+        }
+      },
+      {
         "key": "tg_allow_custom",
-        "name": "允許 /trace 檢測自訂 IP",
+        "name": {
+          "zh_TW": "允許 /trace 檢測自訂 IP",
+          "zh_CN": "允许 /trace 检测自定义 IP",
+          "en": "Allow /trace to custom IPs",
+          "ja": "/trace でカスタム IP の検査を許可"
+        },
         "type": "switch",
         "default": true
       },
       {
         "key": "tg_api_base",
-        "name": "Telegram API 位址（反代時修改）",
+        "name": {
+          "zh_TW": "Telegram API 位址（反代時修改）",
+          "zh_CN": "Telegram API 地址（反代时修改）",
+          "en": "Telegram API base URL (change when using a reverse proxy)",
+          "ja": "Telegram API のアドレス（リバースプロキシ利用時に変更）"
+        },
         "type": "string",
         "default": "https://api.telegram.org"
       }

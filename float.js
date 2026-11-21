@@ -10,6 +10,32 @@
 
   var PAGE = "/api/plugin/cnroute/page/index.html?embed=1";
 
+  // 語系跟隨 Komari 面板：localStorage / cookie 的 "language"、<html lang>，都沒有時用瀏覽器語言
+  var TEXT = {
+    "zh-TW": ["回程路由", "新分頁開啟 ↗", "關閉"],
+    "zh-CN": ["回程路由", "新标签页打开 ↗", "关闭"],
+    en: ["Return Route", "Open in new tab ↗", "Close"],
+    ja: ["帰路ルート", "新しいタブで開く ↗", "閉じる"]
+  };
+  function langCode(x) {
+    x = String(x || "").toLowerCase().replace("_", "-");
+    if (!x) return "";
+    if (/^zh-(tw|hk|mo|hant)/.test(x)) return "zh-TW";
+    if (/^zh/.test(x)) return "zh-CN";
+    if (/^ja/.test(x)) return "ja";
+    if (/^en/.test(x)) return "en";
+    return "";
+  }
+  function lang() {
+    var tries = [];
+    try { tries.push(localStorage.getItem("language")); } catch (e) {}
+    try { var m = document.cookie.match(/(?:^|;\s*)language=([^;]+)/); if (m) tries.push(decodeURIComponent(m[1])); } catch (e) {}
+    tries.push(document.documentElement.lang);
+    tries = tries.concat(navigator.languages || [], [navigator.language]);
+    for (var i = 0; i < tries.length; i++) { var l = langCode(tries[i]); if (l) return l; }
+    return "en";
+  }
+
   // 圖示：22px 單色線條（與 Komari-Plugin-UnlockTest 的浮動按鈕風格一致：白底黑圖示，深色主題自動反轉）
   // 圖案：起點 → 迂迴路徑 → 目的地定位點（自繪）
   var ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
@@ -99,15 +125,33 @@
       ".x:hover{background:var(--line)}" +
       "iframe{flex:1;border:0;width:100%;background:var(--bg)}" +
       "</style>" +
-      '<button class="btn" type="button" aria-label="回程路由" title="回程路由">' + ICON + "</button>" +
-      '<div class="mask" role="dialog" aria-label="回程路由"><div class="box">' +
-      '<div class="bar"><span>回程路由</span><span><a href="' + PAGE.replace("?embed=1", "") + '" target="_blank" rel="noopener">新分頁開啟 ↗</a>' +
-      '<button class="x" type="button" aria-label="關閉">×</button></span></div>' +
-      "<iframe title=\"回程路由\"></iframe></div></div>";
+      '<button class="btn" type="button">' + ICON + "</button>" +
+      '<div class="mask" role="dialog"><div class="box">' +
+      '<div class="bar"><span class="ttl"></span><span><a href="' + PAGE.replace("?embed=1", "") + '" target="_blank" rel="noopener"></a>' +
+      '<button class="x" type="button">×</button></span></div>' +
+      "<iframe></iframe></div></div>";
 
     var btn = root.querySelector(".btn");
     var mask = root.querySelector(".mask");
     var frame = root.querySelector("iframe");
+    var curLang = "";
+    function applyText() {
+      var l = lang();
+      if (l === curLang) return;
+      curLang = l;
+      var tx = TEXT[l];
+      btn.setAttribute("aria-label", tx[0]);
+      btn.title = tx[0];
+      mask.setAttribute("aria-label", tx[0]);
+      frame.title = tx[0];
+      root.querySelector(".ttl").textContent = tx[0];
+      root.querySelector(".bar a").textContent = tx[1];
+      root.querySelector(".x").setAttribute("aria-label", tx[2]);
+    }
+    applyText();
+    // 面板切換語言時跟著換（komari-web 會改 <html lang> 與 localStorage）
+    try { new MutationObserver(applyText).observe(document.documentElement, { attributes: true, attributeFilter: ["lang"] }); } catch (e) {}
+    window.addEventListener("storage", applyText);
 
     function theme() {
       var dark = isDark();
@@ -237,6 +281,7 @@
     function close() { mask.classList.remove("on"); }
     btn.addEventListener("click", function () {
       if (moved) { moved = false; return; } // 拖曳結束不要開視窗
+      applyText();
       open();
     });
     root.querySelector(".x").addEventListener("click", close);

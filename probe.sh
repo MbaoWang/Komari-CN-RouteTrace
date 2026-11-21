@@ -39,7 +39,7 @@ pick_tool() {
 T="$(pick_tool)"
 echo "##TOOL $T"
 if [ "$T" = none ]; then
-  echo "##ERROR 找不到 nexttrace / mtr / traceroute，請在此伺服器安裝其中之一（建議 nexttrace 或 mtr）"
+  echo "##ERROR noTool"
   exit 2
 fi
 
@@ -103,7 +103,7 @@ run_one() {
     esac
     if [ -z "$ip" ]; then
       echo "##BEGIN $id - none"
-      echo "##NOTE 無法解析網域 $target"
+      echo "##NOTE resolve $target"
       echo "##END $id"
       return
     fi
@@ -111,7 +111,7 @@ run_one() {
     # IPv6 目標：伺服器沒有 IPv6 路由時直接回報，不浪費時間追蹤
     if [ -n "$fam" ] && have ip && ! ip -6 route get "$ip" >/dev/null 2>&1; then
       echo "##BEGIN $id $ip none"
-      echo "##NOTE 此伺服器沒有 IPv6 路由"
+      echo "##NOTE noIpv6"
       echo "##END $id"
       return
     fi
