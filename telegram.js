@@ -97,10 +97,15 @@ function fmtNode(L, node, opts) {
   if (node.error) lines.push(`⚠️ ${esc(I18N.error(L, node.error))}`);
   const targets = node.targets || [];
   const hasV6 = targets.some((t) => t.v === 6);
-  [4, 6].forEach((v) => {
-    const list = targets.filter((t) => (t.v || 4) === v);
+  const hasBig = targets.some((t) => t.big);
+  // 分段：IPv4 / IPv6 × 標準 / 大包
+  [[4, false], [4, true], [6, false], [6, true]].forEach(([v, big]) => {
+    const list = targets.filter((t) => (t.v || 4) === v && !!t.big === big);
     if (!list.length) return;
-    if (hasV6) lines.push("", `<b>— IPv${v} —</b>`);
+    if (hasV6 || hasBig) {
+      const bigTxt = big ? " · " + I18N.t(L, "big.desc", { port: list[0].port, size: list[0].psize }) : "";
+      lines.push("", `<b>— IPv${v}${esc(bigTxt)} —</b>`);
+    }
     for (const t of list) {
       const rtt = t.last_rtt !== null && t.last_rtt !== undefined ? `${t.last_rtt} ms` : "—";
       lines.push("");
@@ -115,7 +120,8 @@ function fmtNode(L, node, opts) {
 
 function fmtTarget(L, node, t) {
   const lines = [
-    `🖥 <b>${esc(node.name)}</b> → ${ISP_ICON[t.isp] || "⚪️"} <b>${esc(targetName(L, t))}</b>${t.v === 6 ? " (IPv6)" : ""} <code>${esc(t.ip)}</code>`,
+    `🖥 <b>${esc(node.name)}</b> → ${ISP_ICON[t.isp] || "⚪️"} <b>${esc(targetName(L, t))}</b>${t.v === 6 ? " (IPv6)" : ""} <code>${esc(t.ip)}</code>` +
+      (t.big ? "\n📦 " + esc(I18N.t(L, "big.desc", { port: t.port, size: t.psize })) : ""),
     `${esc(I18N.t(L, "tg.line"))}: <b>${esc(lineText(L, t))}</b>${t.reached === false ? esc(I18N.paren(L, I18N.t(L, "unreached"))) : ""}`,
   ];
   if (t.route) {
@@ -140,7 +146,7 @@ function nodeButtons(L, node) {
   const rows = [];
   let row = [];
   (node.targets || []).forEach((t, i) => {
-    row.push({ text: `${ISP_ICON[t.isp] || "⚪️"} ${targetName(L, t)}${t.v === 6 ? " v6" : ""}`, callback_data: `d:${node.uuid}:${i}` });
+    row.push({ text: `${ISP_ICON[t.isp] || "⚪️"} ${targetName(L, t)}${t.v === 6 ? " v6" : ""}${t.big ? " " + I18N.t(L, "big.short") : ""}`, callback_data: `d:${node.uuid}:${i}` });
     if (row.length === 3) { rows.push(row); row = []; }
   });
   if (row.length) rows.push(row);
@@ -270,6 +276,7 @@ async function cmdStatus(cfg, L, chatId) {
     I18N.t(L, "tg.statusServers", { n: list.length }),
     I18N.t(L, "tg.statusV", { v: 4, x: ver(cfg.v4Enabled, cfg.targets4, cfg.nodes4) }),
     I18N.t(L, "tg.statusV", { v: 6, x: ver(cfg.v6Enabled, cfg.targets6, cfg.nodes6) }),
+    I18N.t(L, "page.modeBig") + ": " + (cfg.bigEnabled ? I18N.t(L, "big.desc", { port: cfg.bigPort, size: cfg.bigPsize }) : I18N.t(L, "tg.off")),
     I18N.t(L, "tg.statusInterval", { n: cfg.interval }),
     I18N.t(L, "tg.statusNotify", { x: I18N.t(L, cfg.tgNotify ? "tg.on" : "tg.off") }),
     I18N.t(L, "tg.statusBusy", { x: busy.length ? esc(busy.join(I18N.t(L, "list.sep"))) : I18N.t(L, "tg.nothing") }),
@@ -460,7 +467,7 @@ async function notifyChange(prev, node) {
   if (!deps || !prev || !prev.targets || !prev.targets.length) return;
   const cfg = await deps.getCfg();
   if (!cfg.tgToken || !cfg.tgNotify || !cfg.tgChats.length) return;
-  const key = (t) => t.label + "|" + (t.v || 4);
+  const key = (t) => t.label + "|" + (t.v || 4) + (t.big ? "|big" : "");
   const before = {};
   for (const t of prev.targets) before[key(t)] = t;
   const changed = [];
@@ -476,7 +483,7 @@ async function notifyChange(prev, node) {
     const L = chatLang[chat] || defaultLang(cfg);
     const lineOf = (x) => I18N.chip(L, x.route) + I18N.paren(L, I18N.access(L, x.route));
     const blocks = changed.map(({ t, old, a, b }) => [
-      `${ISP_ICON[t.isp] || "⚪️"} <b>${esc(targetName(L, t))}${t.v === 6 ? " (IPv6)" : ""}</b>`,
+      `${ISP_ICON[t.isp] || "⚪️"} <b>${esc(targetName(L, t))}${t.v === 6 ? " (IPv6)" : ""}${t.big ? " · " + esc(I18N.t(L, "big.desc", { port: t.port, size: t.psize })) : ""}</b>`,
       ...describeChange(L, a, b).map((x) => `　• ${esc(x)}`),
       `　${esc(I18N.t(L, "tg.before"))}: ${esc(lineOf(old))}`,
       `　${esc(I18N.t(L, "tg.after"))}: <b>${esc(lineOf(t))}</b>`,

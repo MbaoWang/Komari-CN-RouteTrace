@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 MbaoWang
 # komari-cnroute 回程探測腳本（由 Komari 插件透過遠端執行下發到 agent）
-# 用法: bash probe.sh <tool> <install_nexttrace> <max_hops> <parallel> <id>=<目標>,<port>,<icmp|tcp>,<4|6> ...
+# 用法: bash probe.sh <tool> <install_nexttrace> <max_hops> <parallel> <id>=<目標>,<port>,<icmp|tcp>,<4|6>[,<封包大小>] ...
+#   封包大小：大包測試用（例如 1400 = nexttrace --psize 1400），空白 = 工具預設
 #   目標：IP 或網域（網域由這台伺服器自己解析，例如 Zstatic CDN 的 sh-ct-v4.ip.zstaticcdn.com）
 #   tool: auto | nexttrace | mtr | traceroute
 # 輸出（給插件解析）:
@@ -95,7 +96,7 @@ resolve() {
 }
 
 run_one() {
-  local id="$1" target="$2" port="$3" proto="$4" ver="$5" out="$6" ip fam=""
+  local id="$1" target="$2" port="$3" proto="$4" ver="$5" out="$6" psize="$7" ip fam=""
   {
     ip="$target"
     case "$target" in
@@ -120,27 +121,32 @@ run_one() {
     if [ "$proto" = tcp ]; then
       nt_tcp="-T -p $port"; mtr_tcp="--tcp --port $port"; tr_tcp="-T -p $port"
     fi
+    # 大包：封包大小（含 IP 與探測標頭）；traceroute 的封包長度是放在目標後面的參數
+    local nt_ps="" mtr_ps="" tr_ps=""
+    if [ -n "$psize" ]; then
+      nt_ps="--psize $psize"; mtr_ps="-s $psize"; tr_ps="$psize"
+    fi
     case "$T" in
       nexttrace)
         if have python3; then
           echo "##BEGIN $id $ip lines"
-          nexttrace $nt_tcp -j -q 3 -m "$MAXHOP" "$ip" 2>/dev/null | python3 -c "$NT_COMPACT"
+          nexttrace $nt_tcp $nt_ps -j -q 3 -m "$MAXHOP" "$ip" 2>/dev/null | python3 -c "$NT_COMPACT"
         else
           echo "##BEGIN $id $ip ntjson"
-          nexttrace $nt_tcp -j -q 3 -m "$MAXHOP" "$ip" 2>/dev/null
+          nexttrace $nt_tcp $nt_ps -j -q 3 -m "$MAXHOP" "$ip" 2>/dev/null
         fi ;;
       mtr)
         if mtr --help 2>&1 | grep -q -- '--json'; then
           echo "##BEGIN $id $ip mtrjson"
-          mtr $fam $mtr_tcp -z -n -j -c 3 -m "$MAXHOP" "$ip" 2>/dev/null
+          mtr $fam $mtr_tcp $mtr_ps -z -n -j -c 3 -m "$MAXHOP" "$ip" 2>/dev/null
         else
           echo "##BEGIN $id $ip mtrtxt"
-          mtr $fam $mtr_tcp -z -n -r -w -c 3 -m "$MAXHOP" "$ip" 2>/dev/null
+          mtr $fam $mtr_tcp $mtr_ps -z -n -r -w -c 3 -m "$MAXHOP" "$ip" 2>/dev/null
         fi ;;
       traceroute)
         echo "##BEGIN $id $ip tr"
-        traceroute $fam $tr_tcp -A -n -q 2 -w 2 -m "$MAXHOP" "$ip" 2>/dev/null \
-          || traceroute $fam $tr_tcp -n -q 2 -w 2 -m "$MAXHOP" "$ip" 2>/dev/null ;;
+        traceroute $fam $tr_tcp -A -n -q 2 -w 2 -m "$MAXHOP" "$ip" $tr_ps 2>/dev/null \
+          || traceroute $fam $tr_tcp -n -q 2 -w 2 -m "$MAXHOP" "$ip" $tr_ps 2>/dev/null ;;
     esac
     echo
     echo "##END $id"
@@ -158,13 +164,18 @@ for pair in "$@"; do
   id="${pair%%=*}"; rest="${pair#*=}"
   target="${rest%%,*}"; rest="${rest#*,}"
   port="${rest%%,*}"; rest="${rest#*,}"
-  proto="${rest%%,*}"; ver="${rest#*,}"
+  proto="${rest%%,*}"; rest="${rest#*,}"
+  ver="${rest%%,*}"; psize=""
+  case "$rest" in *,*) psize="${rest#*,}" ;; esac
+  case "$psize" in *[!0-9]*) psize="" ;; esac
+  # 封包大小限制在 28～9000，其餘忽略
+  if [ -n "$psize" ] && { [ "$psize" -lt 28 ] || [ "$psize" -gt 9000 ]; }; then psize=""; fi
   [ -z "$target" ] && continue
   case "$port" in ''|*[!0-9]*) port=80 ;; esac
   [ "$proto" = tcp ] || proto=icmp
   [ "$ver" = 6 ] || ver=4
   n=$((n+1))
-  run_one "$id" "$target" "$port" "$proto" "$ver" "$TMP/$n.out" &
+  run_one "$id" "$target" "$port" "$proto" "$ver" "$TMP/$n.out" "$psize" &
   # 同時跑太多會互相干擾，每 PAR 個等一下
   if [ $((n % PAR)) -eq 0 ]; then wait; fi
 done

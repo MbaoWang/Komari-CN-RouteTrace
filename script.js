@@ -94,6 +94,10 @@ async function getCfg() {
     tgApi: String(c.tg_api_base || "https://api.telegram.org").trim().replace(/\/+$/, ""),
     tgNotify: c.tg_notify_change !== false,
     tgDefaultLang: c.tg_default_lang || "zh-TW",
+    // 大包路徑：同一批三網目標再用 TCP 大封包追一次（預設 nexttrace -T -p 443 --psize 1400）
+    bigEnabled: c.big_enabled === true,
+    bigPort: Math.min(65535, Math.max(1, Number(c.big_port) || 443)),
+    bigPsize: Math.min(9000, Math.max(64, Number(c.big_psize) || 1400)),
     tgAllowCustom: c.tg_allow_custom !== false,
   };
 }
@@ -105,7 +109,7 @@ async function listClients() {
 
 function buildCommand(cfg, targets) {
   const protoOf = (t) => t.proto || (cfg.traceProto === "auto" ? (/[g-z]/i.test(t.ip) ? "tcp" : "icmp") : cfg.traceProto);
-  const args = targets.map((t) => `${t.id}=${t.ip},${t.port || 80},${protoOf(t)},${t.v || 4}`).join(" ");
+  const args = targets.map((t) => `${t.id}=${t.ip},${t.port || 80},${protoOf(t)},${t.v || 4}` + (t.psize ? "," + t.psize : "")).join(" ");
   // base64 包裝，避免 shell 引號問題
   // agent 以 `sh -s` 從 stdin 讀指令，子程序 stdin 要導到 /dev/null 以免吃掉後續指令
   return [
@@ -133,7 +137,7 @@ function buildNodeResult(client, cfg, output, exitCode, targets) {
     const b = parsed.blocks[t.id];
     const v = t.v || (t.ip.includes(":") ? 6 : 4);
     const noteErr = (note) => { const [k, ...rest] = String(note).split(" "); return k === "resolve" ? { k, p: { x: rest.join(" ") } } : { k }; };
-    if (!b || b.note) { node.targets.push({ label: t.label, region: t.region || "", custom: t.custom || "", v, isp: t.isp, ip: t.ip, error: b ? noteErr(b.note) : { k: "noResult" }, segments: [], tags: [] }); continue; }
+    if (!b || b.note) { node.targets.push({ label: t.label, region: t.region || "", custom: t.custom || "", big: !!t.big, psize: t.psize || 0, port: t.port || 0, v, isp: t.isp, ip: t.ip, error: b ? noteErr(b.note) : { k: "noResult" }, segments: [], tags: [] }); continue; }
     const src = v === 6 ? client.ipv6 : client.ipv4;
     const comp = lib.compressPath(b.hops, { maskMode: cfg.maskMode, maskFirstAS: cfg.maskFirstAS, srcIP: src });
     // 網域目標以伺服器解析出的 IP 判斷是否到達
@@ -145,6 +149,9 @@ function buildNodeResult(client, cfg, output, exitCode, targets) {
       label: t.label,
       region: t.region || "",
       custom: t.custom || "",
+      big: !!t.big,
+      psize: t.psize || 0,
+      port: t.port || 0,
       v,
       isp: t.isp,
       ip: t.ip,
@@ -169,10 +176,15 @@ function buildNodeResult(client, cfg, output, exitCode, targets) {
 // 這台伺服器要測哪些目標：依 IPv4 / IPv6 各自的伺服器選擇決定
 function targetsFor(cfg, uuid) {
   const pick = (list) => !list.length || list.includes(uuid);
-  return [].concat(
+  const std = [].concat(
     cfg.v4Enabled && pick(cfg.nodes4) ? cfg.targets4 : [],
     cfg.v6Enabled && pick(cfg.nodes6) ? cfg.targets6 : []
   );
+  // 開啟大包檢測時，每個目標多一組 TCP 大封包（id 前面加 b 區分）
+  const big = cfg.bigEnabled
+    ? std.map((t) => Object.assign({}, t, { id: "b" + t.id, proto: "tcp", port: cfg.bigPort, psize: cfg.bigPsize, big: true }))
+    : [];
+  return std.concat(big);
 }
 
 // 對一批節點下發探測，輪詢結果
@@ -300,11 +312,12 @@ function load() {
           const r = results[c.uuid] || { uuid: c.uuid, name: c.name, targets: [] };
           const want = targetsFor(cfg, c.uuid);
           const vers = new Set(want.map((t) => t.v));
-          const targets = (r.targets || []).filter((t) => vers.has(t.v || 4));
+          // 關掉大包檢測後，舊的大包結果不再顯示
+          const targets = (r.targets || []).filter((t) => vers.has(t.v || 4) && (!t.big || cfg.bigEnabled));
           // versions：這台伺服器有被選入哪些版本的檢測，頁面依此決定在 IPv4 / IPv6 分頁是否列出
           return Object.assign({}, r, { name: c.name, targets, versions: [...vers].sort(), running: !!running[c.uuid] });
         });
-      json(res, 200, { admin, interval: cfg.interval, nodes });
+      json(res, 200, { admin, interval: cfg.interval, big: cfg.bigEnabled ? { port: cfg.bigPort, psize: cfg.bigPsize } : null, nodes });
     } catch (e) {
       json(res, 500, { error: e.message || String(e) });
     }

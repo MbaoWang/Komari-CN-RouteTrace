@@ -13,7 +13,7 @@
     "ja": "各サーバーから中国電信 / 聯通 / 移動への帰路を定期的にトレースし、AS ごとにまとめて CN2 GIA / GT、9929、CMIN2 などの回線を判定します。サーバー IP は自動でマスクされます。"
   },
   "author": "MbaoWang",
-  "version": "1.13.0",
+  "version": "1.14.0",
   "entry": "script.js",
   "permissions": {
     "node": true,
@@ -200,6 +200,61 @@
           "zh_CN": "「IPv6 目标来源」选 custom 时才使用",
           "en": "Only used when \"IPv6 target source\" is custom",
           "ja": "「IPv6 ターゲットの種類」が custom のときのみ使用"
+        }
+      },
+      {
+        "key": "big_title",
+        "name": {
+          "zh_TW": "大包路徑檢測",
+          "zh_CN": "大包路径检测",
+          "en": "Large-packet route checks",
+          "ja": "大パケット経路検査"
+        },
+        "type": "title"
+      },
+      {
+        "key": "big_enabled",
+        "name": {
+          "zh_TW": "同時檢測大包回程（TCP 大封包）",
+          "zh_CN": "同时检测大包回程（TCP 大封包）",
+          "en": "Also check return routes with large TCP packets",
+          "ja": "大きな TCP パケットでも帰路を検査"
+        },
+        "type": "switch",
+        "default": false,
+        "help": {
+          "zh_TW": "對同一批三網目標（IPv4 / IPv6 都會）再追蹤一次，等同 nexttrace -T -p 443 --psize 1400。有些線路大封包與小封包會走不同路徑；開啟後每輪檢測時間約加倍，結果頁會多一個「標準 / 大包」切換",
+          "zh_CN": "对同一批三网目标（IPv4 / IPv6 都会）再追踪一次，等同 nexttrace -T -p 443 --psize 1400。有些线路大封包与小封包会走不同路径；开启后每轮检测时间约加倍，结果页会多一个「标准 / 大包」切换",
+          "en": "Traces the same China Telecom / Unicom / Mobile targets again (IPv4 and IPv6), like nexttrace -T -p 443 --psize 1400. Some routes carry large packets differently; each round takes about twice as long, and the results page gets a \"Standard / Large\" switch",
+          "ja": "同じ三大キャリアのターゲット（IPv4 / IPv6）をもう一度トレースします（nexttrace -T -p 443 --psize 1400 相当）。大きなパケットは別の経路を通ることがあります。1 回の検査時間はおよそ倍になり、結果ページに「標準 / 大パケット」切り替えが追加されます"
+        }
+      },
+      {
+        "key": "big_port",
+        "name": {
+          "zh_TW": "大包檢測 TCP port",
+          "zh_CN": "大包检测 TCP port",
+          "en": "Large-packet TCP port",
+          "ja": "大パケット検査の TCP ポート"
+        },
+        "type": "number",
+        "default": 443
+      },
+      {
+        "key": "big_psize",
+        "name": {
+          "zh_TW": "大包封包大小（位元組，含 IP 標頭）",
+          "zh_CN": "大包封包大小（字节，含 IP 头）",
+          "en": "Large packet size (bytes, including IP header)",
+          "ja": "大パケットのサイズ（バイト、IP ヘッダー込み）"
+        },
+        "type": "number",
+        "default": 1400,
+        "help": {
+          "zh_TW": "64～9000；nexttrace 用 --psize、mtr 用 -s、traceroute 用封包長度參數",
+          "zh_CN": "64～9000；nexttrace 用 --psize、mtr 用 -s、traceroute 用封包长度参数",
+          "en": "64–9000; passed as --psize to nexttrace, -s to mtr, packet length to traceroute",
+          "ja": "64～9000；nexttrace は --psize、mtr は -s、traceroute はパケット長引数で指定"
         }
       },
       {

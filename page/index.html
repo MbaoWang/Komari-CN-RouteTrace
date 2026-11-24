@@ -202,6 +202,10 @@ if (EMBED) document.documentElement.classList.add("embed");
 let lastData = null;
 let ver = 4;
 try { ver = Number(localStorage.getItem("cnroute-ver")) === 6 ? 6 : 4; } catch (_) {}
+// 標準 / 大包（TCP 大封包）分頁
+let mode = "std";
+try { mode = localStorage.getItem("cnroute-mode") === "big" ? "big" : "std"; } catch (_) {}
+const tKey = (t) => "v" + ver + ":" + mode + ":" + t.label + ":" + t.ip;
 const confText = (t) => (t.route ? I.confText(L, t.route.confidence) : "");
 const tagText = (t) => {
   const base = t.route ? I.label(L, t.route) || (t.tags || [])[0] || "" : (t.tags || [])[0] || "";
@@ -268,6 +272,7 @@ function detailHTML(t) {
     </div>` : "";
   return `<div class="detail">
     <div class="dh"><span class="label ${esc(t.isp)}">${esc(tLabel(t))}</span>
+      ${t.big ? `<span class="sub">${esc(T("big.desc", { port: t.port, size: t.psize }))}</span>` : ""}
       ${t.error ? "" : `<span class="chip ${ispColor(t)}">${esc(tagText(t))}</span>`}
       <span class="spacer"></span><span class="rtt">${t.last_rtt != null ? t.last_rtt + " ms" : ""}</span></div>
     <span class="aspath">${esc(t.as_path || I.error(L, t.error) || "")}</span>
@@ -281,7 +286,7 @@ function nodeGrid(n, targets) {
   const byRegion = {};
   const others = [];
   targets.forEach((t) => {
-    const key = "v" + ver + ":" + t.label + ":" + t.ip;
+    const key = tKey(t);
     const r = regionOf(t);
     if (!r) { others.push([t, key]); return; }
     if (!byRegion[r]) { byRegion[r] = {}; regions.push(r); }
@@ -296,13 +301,12 @@ function nodeGrid(n, targets) {
   }
   for (const [t, key] of others) html += `<div class="rg">${esc(T("page.other"))}</div><div class="other">${cellHTML(n, t, key).slice(5, -6)}</div>`;
   html += "</div>";
-  const open = targets.find((t) => "v" + ver + ":" + t.label + ":" + t.ip === openCell[n.uuid]);
+  const open = targets.find((t) => tKey(t) === openCell[n.uuid]);
   return html + (open ? detailHTML(open) : "");
 }
 
 function render(data) {
   isAdmin = !!data.admin && !EMBED;
-  document.getElementById("sub").textContent = T("page.sub", { n: data.interval });
   lastData = data;
   // 伺服器有被選入哪些版本（舊版 API 沒有 versions 時，從結果推回）
   const versOf = (n) => n.versions || [...new Set((n.targets || []).map((t) => t.v || 4))];
@@ -310,13 +314,19 @@ function render(data) {
   const hasV6 = data.nodes.some((n) => versOf(n).includes(6));
   if (!hasV6) ver = 4; else if (!hasV4) ver = 6;
   const toggle = hasV4 && hasV6 ? `<span class="seg-ctl"><button data-ver="4" class="${ver === 4 ? "on" : ""}">IPv4</button><button data-ver="6" class="${ver === 6 ? "on" : ""}">IPv6</button></span>` : "";
-  document.getElementById("actions").innerHTML = toggle + (isAdmin ? `<button id="runall">${esc(T("page.runAll"))}</button>` : "");
+  // 有大包結果時才顯示「標準 / 大包」切換
+  const hasBig = !!data.big && data.nodes.some((n) => (n.targets || []).some((t) => t.big && (t.v || 4) === ver));
+  if (!hasBig) mode = "std";
+  const modeCtl = hasBig ? `<span class="seg-ctl"><button data-mode="std" class="${mode === "std" ? "on" : ""}">${esc(T("page.modeStd"))}</button><button data-mode="big" class="${mode === "big" ? "on" : ""}">${esc(T("page.modeBig"))}</button></span>` : "";
+  document.getElementById("sub").textContent = T("page.sub", { n: data.interval }) +
+    (mode === "big" && data.big ? " · " + T("big.desc", { port: data.big.port, size: data.big.psize }) : "");
+  document.getElementById("actions").innerHTML = toggle + modeCtl + (isAdmin ? `<button id="runall">${esc(T("page.runAll"))}</button>` : "");
   const list = document.getElementById("list");
   // 只列出有被選入目前分頁版本的伺服器
   const nodes = data.nodes.filter((n) => versOf(n).includes(ver));
   if (!nodes.length) { list.innerHTML = `<div class="empty">${esc(T("page.noNodes", { v: ver }))}</div>`; return; }
   list.innerHTML = nodes.map((n) => {
-    const targets = (n.targets || []).filter((t) => (t.v || 4) === ver);
+    const targets = (n.targets || []).filter((t) => (t.v || 4) === ver && !!t.big === (mode === "big"));
     const src = ver === 6 ? n.src6_masked : n.src_masked;
     return `<div class="node">
       <div class="nhead">
@@ -364,6 +374,10 @@ document.addEventListener("click", (e) => {
   } else if (b.dataset.ver) {
     ver = Number(b.dataset.ver);
     try { localStorage.setItem("cnroute-ver", String(ver)); } catch (_) {}
+    if (lastData) render(lastData);
+  } else if (b.dataset.mode) {
+    mode = b.dataset.mode === "big" ? "big" : "std";
+    try { localStorage.setItem("cnroute-mode", mode); } catch (_) {}
     if (lastData) render(lastData);
   } else if (b.id === "runall") run("");
   else if (b.dataset.run) { b.disabled = true; run(b.dataset.run); }
