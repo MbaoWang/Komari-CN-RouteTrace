@@ -319,7 +319,7 @@ function render(data) {
   if (!hasBig) mode = "std";
   const modeCtl = hasBig ? `<span class="seg-ctl"><button data-mode="std" class="${mode === "std" ? "on" : ""}">${esc(T("page.modeStd"))}</button><button data-mode="big" class="${mode === "big" ? "on" : ""}">${esc(T("page.modeBig"))}</button></span>` : "";
   document.getElementById("sub").textContent = T("page.sub", { n: data.interval }) +
-    (mode === "big" && data.big ? " · " + T("big.desc", { port: data.big.port, size: data.big.psize }) : "");
+    (mode === "big" && data.big ? " · " + T(data.big.port ? "big.desc" : "big.descAuto", { port: data.big.port, size: data.big.psize }) : "");
   document.getElementById("actions").innerHTML = toggle + modeCtl + (isAdmin ? `<button id="runall">${esc(T("page.runAll"))}</button>` : "");
   const list = document.getElementById("list");
   // 只列出有被選入目前分頁版本的伺服器

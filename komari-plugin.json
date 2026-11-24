@@ -13,7 +13,7 @@
     "ja": "各サーバーから中国電信 / 聯通 / 移動への帰路を定期的にトレースし、AS ごとにまとめて CN2 GIA / GT、9929、CMIN2 などの回線を判定します。サーバー IP は自動でマスクされます。"
   },
   "author": "MbaoWang",
-  "version": "1.14.0",
+  "version": "1.14.1",
   "entry": "script.js",
   "permissions": {
     "node": true,
@@ -223,22 +223,28 @@
         "type": "switch",
         "default": false,
         "help": {
-          "zh_TW": "對同一批三網目標（IPv4 / IPv6 都會）再追蹤一次，等同 nexttrace -T -p 443 --psize 1400。有些線路大封包與小封包會走不同路徑；開啟後每輪檢測時間約加倍，結果頁會多一個「標準 / 大包」切換",
-          "zh_CN": "对同一批三网目标（IPv4 / IPv6 都会）再追踪一次，等同 nexttrace -T -p 443 --psize 1400。有些线路大封包与小封包会走不同路径；开启后每轮检测时间约加倍，结果页会多一个「标准 / 大包」切换",
-          "en": "Traces the same China Telecom / Unicom / Mobile targets again (IPv4 and IPv6), like nexttrace -T -p 443 --psize 1400. Some routes carry large packets differently; each round takes about twice as long, and the results page gets a \"Standard / Large\" switch",
-          "ja": "同じ三大キャリアのターゲット（IPv4 / IPv6）をもう一度トレースします（nexttrace -T -p 443 --psize 1400 相当）。大きなパケットは別の経路を通ることがあります。1 回の検査時間はおよそ倍になり、結果ページに「標準 / 大パケット」切り替えが追加されます"
+          "zh_TW": "對同一批三網目標（IPv4 / IPv6 都會）再追蹤一次，等同 nexttrace -T -p <目標 port> --psize 1400。有些線路大封包與小封包會走不同路徑；開啟後每輪檢測時間約加倍，結果頁會多一個「標準 / 大包」切換",
+          "zh_CN": "对同一批三网目标（IPv4 / IPv6 都会）再追踪一次，等同 nexttrace -T -p <目標 port> --psize 1400。有些线路大封包与小封包会走不同路径；开启后每轮检测时间约加倍，结果页会多一个「标准 / 大包」切换",
+          "en": "Traces the same China Telecom / Unicom / Mobile targets again (IPv4 and IPv6), like nexttrace -T -p <target port> --psize 1400. Some routes carry large packets differently; each round takes about twice as long, and the results page gets a \"Standard / Large\" switch",
+          "ja": "同じ三大キャリアのターゲット（IPv4 / IPv6）をもう一度トレースします（nexttrace -T -p <ターゲットのポート> --psize 1400 相当）。大きなパケットは別の経路を通ることがあります。1 回の検査時間はおよそ倍になり、結果ページに「標準 / 大パケット」切り替えが追加されます"
         }
       },
       {
         "key": "big_port",
         "name": {
-          "zh_TW": "大包檢測 TCP port",
-          "zh_CN": "大包检测 TCP port",
-          "en": "Large-packet TCP port",
-          "ja": "大パケット検査の TCP ポート"
+          "zh_TW": "大包檢測 TCP port（0 = 依各三網目標）",
+          "zh_CN": "大包检测 TCP port（0 = 依各三网目标）",
+          "en": "Large-packet TCP port (0 = per target)",
+          "ja": "大パケット検査の TCP ポート（0 = ターゲットごと）"
         },
         "type": "number",
-        "default": 443
+        "default": 0,
+        "help": {
+          "zh_TW": "0：依各三網測試地址自己的 port（Zstatic 節點為 80，自訂目標用該行填的 port，沒填為 80）；填數字則全部固定用該 port（例如 443）",
+          "zh_CN": "0：依各三网测试地址自己的 port（Zstatic 节点为 80，自定义目标用该行填的 port，没填为 80）；填数字则全部固定用该 port（例如 443）",
+          "en": "0: use each target's own port (80 for Zstatic nodes; for custom targets the port on that line, 80 if empty); a number forces that port for all (e.g. 443)",
+          "ja": "0：各ターゲット自身のポート（Zstatic ノードは 80、カスタムはその行のポート、未指定は 80）；数値を入れるとすべてそのポート（例：443）"
+        }
       },
       {
         "key": "big_psize",

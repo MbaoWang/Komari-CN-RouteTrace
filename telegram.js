@@ -103,7 +103,9 @@ function fmtNode(L, node, opts) {
     const list = targets.filter((t) => (t.v || 4) === v && !!t.big === big);
     if (!list.length) return;
     if (hasV6 || hasBig) {
-      const bigTxt = big ? " · " + I18N.t(L, "big.desc", { port: list[0].port, size: list[0].psize }) : "";
+      // 各目標 port 相同時標出 port，不同時（依各目標）只標封包大小
+      const samePort = list.every((t) => t.port === list[0].port);
+      const bigTxt = big ? " · " + I18N.t(L, samePort ? "big.desc" : "big.descAuto", { port: list[0].port, size: list[0].psize }) : "";
       lines.push("", `<b>— IPv${v}${esc(bigTxt)} —</b>`);
     }
     for (const t of list) {
@@ -276,7 +278,7 @@ async function cmdStatus(cfg, L, chatId) {
     I18N.t(L, "tg.statusServers", { n: list.length }),
     I18N.t(L, "tg.statusV", { v: 4, x: ver(cfg.v4Enabled, cfg.targets4, cfg.nodes4) }),
     I18N.t(L, "tg.statusV", { v: 6, x: ver(cfg.v6Enabled, cfg.targets6, cfg.nodes6) }),
-    I18N.t(L, "page.modeBig") + ": " + (cfg.bigEnabled ? I18N.t(L, "big.desc", { port: cfg.bigPort, size: cfg.bigPsize }) : I18N.t(L, "tg.off")),
+    I18N.t(L, "page.modeBig") + ": " + (cfg.bigEnabled ? I18N.t(L, cfg.bigPort ? "big.desc" : "big.descAuto", { port: cfg.bigPort, size: cfg.bigPsize }) : I18N.t(L, "tg.off")),
     I18N.t(L, "tg.statusInterval", { n: cfg.interval }),
     I18N.t(L, "tg.statusNotify", { x: I18N.t(L, cfg.tgNotify ? "tg.on" : "tg.off") }),
     I18N.t(L, "tg.statusBusy", { x: busy.length ? esc(busy.join(I18N.t(L, "list.sep"))) : I18N.t(L, "tg.nothing") }),

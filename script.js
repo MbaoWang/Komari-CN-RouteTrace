@@ -96,7 +96,8 @@ async function getCfg() {
     tgDefaultLang: c.tg_default_lang || "zh-TW",
     // 大包路徑：同一批三網目標再用 TCP 大封包追一次（預設 nexttrace -T -p 443 --psize 1400）
     bigEnabled: c.big_enabled === true,
-    bigPort: Math.min(65535, Math.max(1, Number(c.big_port) || 443)),
+    // 0 / 空白 = 依各三網目標自己的 port（Zstatic 節點 80、自訂目標用該行填的 port）
+    bigPort: Number(c.big_port) > 0 ? Math.min(65535, Math.floor(Number(c.big_port))) : 0,
     bigPsize: Math.min(9000, Math.max(64, Number(c.big_psize) || 1400)),
     tgAllowCustom: c.tg_allow_custom !== false,
   };
@@ -182,7 +183,7 @@ function targetsFor(cfg, uuid) {
   );
   // 開啟大包檢測時，每個目標多一組 TCP 大封包（id 前面加 b 區分）
   const big = cfg.bigEnabled
-    ? std.map((t) => Object.assign({}, t, { id: "b" + t.id, proto: "tcp", port: cfg.bigPort, psize: cfg.bigPsize, big: true }))
+    ? std.map((t) => Object.assign({}, t, { id: "b" + t.id, proto: "tcp", port: cfg.bigPort || t.port || 80, psize: cfg.bigPsize, big: true }))
     : [];
   return std.concat(big);
 }
@@ -317,7 +318,7 @@ function load() {
           // versions：這台伺服器有被選入哪些版本的檢測，頁面依此決定在 IPv4 / IPv6 分頁是否列出
           return Object.assign({}, r, { name: c.name, targets, versions: [...vers].sort(), running: !!running[c.uuid] });
         });
-      json(res, 200, { admin, interval: cfg.interval, big: cfg.bigEnabled ? { port: cfg.bigPort, psize: cfg.bigPsize } : null, nodes });
+      json(res, 200, { admin, interval: cfg.interval, big: cfg.bigEnabled ? { port: cfg.bigPort || null, psize: cfg.bigPsize } : null, nodes });
     } catch (e) {
       json(res, 500, { error: e.message || String(e) });
     }
