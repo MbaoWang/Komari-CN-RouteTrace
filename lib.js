@@ -388,7 +388,8 @@ function compressPath(hops, opts) {
     seg.hops++;
     if (shownIP && !seg.ips.includes(shownIP) && seg.ips.length < 6) seg.ips.push(shownIP);
     if (!seg.name && h.owner) seg.name = h.owner;
-    if (h.geo && !priv) { seg.geo = h.geo; seg.geo_orig = h.geo_orig || ""; }
+    // geo_in：這段第一跳的位置，geo：最後一跳的位置（例如 CMI 從東京跨海到廣州）
+    if (h.geo && !priv) { if (!seg.geo_in) seg.geo_in = h.geo; seg.geo = h.geo; seg.geo_orig = h.geo_orig || ""; }
     if (h.rtt !== null && h.rtt !== undefined) {
       if (seg.rtt_in === null || seg.rtt_in === undefined) seg.rtt_in = h.rtt;
       seg.rtt_out = h.rtt;
@@ -398,7 +399,7 @@ function compressPath(hops, opts) {
   // 第一公網段的地理位置也會暴露本機，一併隱藏
   if (maskFirstAS) {
     const s = segs.find((x) => x.key !== "LAN");
-    if (s) { s.geo = ""; s.geo_orig = ""; }
+    if (s) { s.geo = ""; s.geo_in = ""; s.geo_orig = ""; }
   }
   return { segments: segs, last_rtt: lastRtt };
 }
@@ -685,6 +686,8 @@ function classify(hops, isp, dst, opts) {
     const ownLeg = !!(entryHop && entryHop.overseas && (jump === null || jump < HANDOFF_JUMP_MS));
     showTransit = !ownLeg;
     if (!ownLeg && jump !== null) res.ev.push(E("ev.gap.jump", { x: res.handover, ms: jump }));
+    // 為什麼不寫業者：在海外就交給三網，跨海由三網自己的骨幹承載
+    if (ownLeg && nets.length && !/^(prov|mix):/.test(nets[0])) res.ev.push(E(entryHop.geo ? "ev.ownLeg" : "ev.ownLegNoGeo", { x: res.handover, n: nets[0], g: entryHop.geo }));
   }
 
   res.chain = (showTransit ? [res.handover] : []).concat(nets);

@@ -58,7 +58,7 @@
       "ev.cm.cmi": "經過 AS58453（CMI），未見 CMIN2",
       "ev.cm.cmnet": "直接進 CMNET 骨幹（221.183 / 111.24）", "ev.cm.cmnetv6": "直接進 CMNET 骨幹（2409:8080::）",
       "ev.cm.prov": "沒有經過 CMIN2 / CMI / CMNET 骨幹，直接進入移動當地網",
-      "ev.gap.entry": "交接點前有跳點沒有回應", "ev.gap.jump": "{x} 交接後延遲增加 {ms} ms，看不到三網自己的海外節點", "ev.gap.unreached": "沒有到達目的地",
+      "ev.gap.entry": "交接點前有跳點沒有回應", "ev.gap.jump": "{x} 交接後延遲增加 {ms} ms，看不到三網自己的海外節點", "ev.ownLeg": "{x} 在海外（{g}）就交給 {n}，跨海由 {n} 自己的骨幹承載", "ev.ownLegNoGeo": "{x} 在海外就交給 {n}，跨海由 {n} 自己的骨幹承載", "ev.gap.unreached": "沒有到達目的地",
       "ev.cross": "{a}入境後才交給{b}", "ev.crossNear": "{a}入境後在目的地附近才交給{b}",
       "ev.sep": "；", "list.sep": "、",
       "intl.inside": "機房直接位於三網", "intl.direct": "機房直連三網",
@@ -134,7 +134,7 @@
       "ev.cm.cmi": "经过 AS58453（CMI），未见 CMIN2",
       "ev.cm.cmnet": "直接进 CMNET 骨干（221.183 / 111.24）", "ev.cm.cmnetv6": "直接进 CMNET 骨干（2409:8080::）",
       "ev.cm.prov": "没有经过 CMIN2 / CMI / CMNET 骨干，直接进入移动当地网",
-      "ev.gap.entry": "交接点前有跳点没有回应", "ev.gap.jump": "{x} 交接后延迟增加 {ms} ms，看不到三网自己的海外节点", "ev.gap.unreached": "没有到达目的地",
+      "ev.gap.entry": "交接点前有跳点没有回应", "ev.gap.jump": "{x} 交接后延迟增加 {ms} ms，看不到三网自己的海外节点", "ev.ownLeg": "{x} 在海外（{g}）就交给 {n}，跨海由 {n} 自己的骨干承载", "ev.ownLegNoGeo": "{x} 在海外就交给 {n}，跨海由 {n} 自己的骨干承载", "ev.gap.unreached": "没有到达目的地",
       "ev.cross": "{a}入境后才交给{b}", "ev.crossNear": "{a}入境后在目的地附近才交给{b}",
       "ev.sep": "；", "list.sep": "、",
       "intl.inside": "机房直接位于三网", "intl.direct": "机房直连三网",
@@ -210,7 +210,7 @@
       "ev.cm.cmi": "Via AS58453 (CMI), no CMIN2",
       "ev.cm.cmnet": "Directly into the CMNET backbone (221.183 / 111.24)", "ev.cm.cmnetv6": "Directly into the CMNET backbone (2409:8080::)",
       "ev.cm.prov": "No CMIN2 / CMI / CMNET backbone; enters the local Mobile network directly",
-      "ev.gap.entry": "Some hops before the handoff did not respond", "ev.gap.jump": "Latency rises {ms} ms after the {x} handoff; no overseas node of the China carrier is visible", "ev.gap.unreached": "Destination not reached",
+      "ev.gap.entry": "Some hops before the handoff did not respond", "ev.gap.jump": "Latency rises {ms} ms after the {x} handoff; no overseas node of the China carrier is visible", "ev.ownLeg": "{x} hands over to {n} abroad ({g}); {n} carries it across the sea on its own backbone", "ev.ownLegNoGeo": "{x} hands over to {n} abroad; {n} carries it across the sea on its own backbone", "ev.gap.unreached": "Destination not reached",
       "ev.cross": "{a} carries it into China, then hands over to {b}", "ev.crossNear": "{a} carries it into China and hands over to {b} near the destination",
       "ev.sep": "; ", "list.sep": ", ",
       "intl.inside": "Server is inside a China carrier network", "intl.direct": "Server connects directly to China carriers",
@@ -286,7 +286,7 @@
       "ev.cm.cmi": "AS58453（CMI）経由、CMIN2 なし",
       "ev.cm.cmnet": "CMNET バックボーン（221.183 / 111.24）に直接入ります", "ev.cm.cmnetv6": "CMNET バックボーン（2409:8080::）に直接入ります",
       "ev.cm.prov": "CMIN2 / CMI / CMNET バックボーンを経由せず、地域の移動網に直接入ります",
-      "ev.gap.entry": "引き渡し前に応答しないホップがあります", "ev.gap.jump": "{x} での引き渡し後に遅延が {ms} ms 増加、中国キャリア自身の海外ノードは見えません", "ev.gap.unreached": "宛先に到達していません",
+      "ev.gap.entry": "引き渡し前に応答しないホップがあります", "ev.gap.jump": "{x} での引き渡し後に遅延が {ms} ms 増加、中国キャリア自身の海外ノードは見えません", "ev.ownLeg": "{x} が海外（{g}）で {n} に引き渡し、海を越える区間は {n} 自身のバックボーン", "ev.ownLegNoGeo": "{x} が海外で {n} に引き渡し、海を越える区間は {n} 自身のバックボーン", "ev.gap.unreached": "宛先に到達していません",
       "ev.cross": "{a}が中国に入った後に{b}へ引き渡し", "ev.crossNear": "{a}が中国に入り、宛先付近で{b}へ引き渡し",
       "ev.sep": "；", "list.sep": "、",
       "intl.inside": "サーバーは中国キャリア網内にあります", "intl.direct": "サーバーは中国キャリアに直結",
@@ -469,6 +469,17 @@
     if (!s.asn) return t(lang, "seg.unknown");
     return s.name || "";
   }
+  // 每段的位置與延遲：這段內位置或延遲有明顯變化時寫成「起 → 迄」，例如 CMI「日本 东京 → 中国 广东 广州 · 2.2 → 58.7 ms」
+  function segGeo(s) {
+    if (!s || !s.geo) return "";
+    return s.geo_in && s.geo_in !== s.geo ? s.geo_in + " → " + s.geo : s.geo;
+  }
+  function segRtt(s) {
+    if (!s || s.rtt_out === null || s.rtt_out === undefined) return "";
+    if (s.hops > 1 && s.rtt_in !== null && s.rtt_in !== undefined && Math.abs(s.rtt_out - s.rtt_in) >= 5) return s.rtt_in + " → " + s.rtt_out + " ms";
+    return s.rtt_out + " ms";
+  }
+
   function error(lang, e) {
     if (!e) return "";
     if (typeof e === "string") return e; // 舊版結果
@@ -489,6 +500,6 @@
   return {
     LANGS: LANGS, paren: paren, resolve: resolve, t: t, province: province, targetLabel: targetLabel, PROVINCES: PROVINCES,
     asName: asName, INTL_AS: INTL_AS, CN_AS: CN_AS, net: net, chain: chain, access: access, chip: chip, label: label,
-    confText: confText, evidence: evidence, intl: intl, segName: segName, error: error, ago: ago
+    segGeo: segGeo, segRtt: segRtt, confText: confText, evidence: evidence, intl: intl, segName: segName, error: error, ago: ago
   };
 });

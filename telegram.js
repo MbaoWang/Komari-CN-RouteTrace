@@ -133,9 +133,9 @@ function fmtTarget(L, node, t) {
   }
   lines.push("");
   for (const s of t.segments || []) {
-    const rtt = s.rtt_out !== null && s.rtt_out !== undefined ? ` · ${s.rtt_out} ms` : "";
+    const rtt = s.rtt_out !== null && s.rtt_out !== undefined ? ` · ${I18N.segRtt(s)}` : "";
     const name = I18N.segName(L, s);
-    const geo = s.geo ? ` (${esc(s.geo)}${s.geo_orig ? "；" + esc(I18N.t(L, "seg.geoFixed", { x: s.geo_orig })) : ""})` : "";
+    const geo = s.geo ? ` (${esc(I18N.segGeo(s))}${s.geo_orig ? "；" + esc(I18N.t(L, "seg.geoFixed", { x: s.geo_orig })) : ""})` : "";
     const ips = (s.ips || []).map((x) => (x === "LAN" || x === "內網" ? I18N.t(L, "seg.lanIp") : x));
     lines.push(`<b>${esc(s.key)}</b>${name ? " " + esc(name) : ""}${geo}`);
     lines.push(`   ${esc(I18N.t(L, "page.hops", { n: s.hops }))}${s.timeouts ? ` +${s.timeouts}*` : ""}${rtt}${ips.length ? "  <code>" + esc(ips.join(" ")) + "</code>" : ""}`);
