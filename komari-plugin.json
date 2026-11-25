@@ -13,7 +13,7 @@
     "ja": "各サーバーから中国電信 / 聯通 / 移動への帰路を定期的にトレースし、AS ごとにまとめて CN2 GIA / GT、9929、CMIN2 などの回線を判定します。サーバー IP は自動でマスクされます。"
   },
   "author": "MbaoWang",
-  "version": "1.16.1",
+  "version": "1.16.2",
   "entry": "script.js",
   "permissions": {
     "node": true,

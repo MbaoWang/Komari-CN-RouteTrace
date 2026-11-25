@@ -32,16 +32,37 @@ async function api(cfg, method, body) {
   return j.result;
 }
 
-// 超過 Telegram 4096 字元上限時按行切開
-function chunks(text) {
+// Telegram 4096 字元上限是「剝掉 HTML 標籤、還原實體後」的純文字長度
+function plainLen(s) {
+  return String(s).replace(/<[^>]+>/g, "").replace(/&(amp|lt|gt|quot);/g, "x").length;
+}
+
+// 超過 Telegram 4096 純文字字元上限時，優先按空白行（整個目標區塊）切開，單一區塊仍超長時再按行切
+function chunks(text, limit = 3900) {
   const out = [];
   let cur = "";
-  for (const line of text.split("\n")) {
-    if (cur.length + line.length + 1 > 3800) { out.push(cur); cur = ""; }
-    cur += (cur ? "\n" : "") + line;
+  for (const block of String(text).split("\n\n")) {
+    const sep = cur ? "\n\n" : "";
+    if (plainLen(cur) + sep.length + plainLen(block) <= limit) {
+      cur += sep + block;
+    } else if (plainLen(block) <= limit) {
+      if (cur) out.push(cur);
+      cur = block;
+    } else {
+      const lines = block.split("\n");
+      for (let i = 0; i < lines.length; i++) {
+        const lsep = cur ? (i === 0 ? "\n\n" : "\n") : "";
+        if (cur && plainLen(cur) + lsep.length + plainLen(lines[i]) > limit) {
+          out.push(cur);
+          cur = lines[i];
+        } else {
+          cur += lsep + lines[i];
+        }
+      }
+    }
   }
   if (cur) out.push(cur);
-  return out;
+  return out.length ? out : [""];
 }
 
 async function send(cfg, chatId, text, extra) {
@@ -91,18 +112,23 @@ function lineText(L, t) {
 
 function fmtNode(L, node, opts) {
   opts = opts || {};
-  const src = [node.src_masked, node.src6_masked].filter(Boolean).map((x) => `<code>${esc(x)}</code>`).join(" ");
-  const lines = [`🖥 <b>${esc(node.name)}</b>${src ? "  " + src : ""}`];
+  const ver = opts.ver === 4 || opts.ver === 6 ? opts.ver : 0;
+  const srcList = ver === 4 ? [node.src_masked] : ver === 6 ? [node.src6_masked] : [node.src_masked, node.src6_masked];
+  const src = srcList.filter(Boolean).map((x) => `<code>${esc(x)}</code>`).join(" ");
+  const verTag = ver ? ` · IPv${ver}` : "";
+  const lines = [`🖥 <b>${esc(node.name)}</b>${verTag}${src ? "  " + src : ""}`];
   lines.push(`🕒 ${esc(I18N.ago(L, node.updated_at))}${node.tool ? " · " + esc(node.tool) : ""}${opts.running ? " · ⏳ " + esc(I18N.t(L, "page.running")) : ""}`);
-  if (node.error) lines.push(`⚠️ ${esc(I18N.error(L, node.error))}`);
+  if (node.error && opts.showError !== false) lines.push(`⚠️ ${esc(I18N.error(L, node.error))}`);
   const targets = node.targets || [];
-  const hasV6 = targets.some((t) => t.v === 6);
-  const hasBig = targets.some((t) => t.big);
+  const scoped = ver ? targets.filter((t) => (t.v || 4) === ver) : targets;
+  const hasBig = scoped.some((t) => t.big);
+  const showHeader = ver ? hasBig : (targets.some((t) => t.v === 6) || hasBig);
+  const pairs = ver ? [[ver, false], [ver, true]] : [[4, false], [4, true], [6, false], [6, true]];
   // 分段：IPv4 / IPv6 × 標準 / 大包
-  [[4, false], [4, true], [6, false], [6, true]].forEach(([v, big]) => {
+  pairs.forEach(([v, big]) => {
     const list = targets.filter((t) => (t.v || 4) === v && !!t.big === big);
     if (!list.length) return;
-    if (hasV6 || hasBig) {
+    if (showHeader) {
       // 各目標 port 相同時標出 port，不同時（依各目標）只標封包大小
       const samePort = list.every((t) => t.port === list[0].port);
       const bigTxt = big ? " · " + I18N.t(L, samePort ? "big.desc" : "big.descAuto", { port: list[0].port, size: list[0].psize }) : "";
@@ -144,17 +170,52 @@ function fmtTarget(L, node, t) {
   return lines.join("\n");
 }
 
-function nodeButtons(L, node) {
+function nodeButtons(L, node, opts) {
+  opts = opts || {};
+  const ver = opts.ver === 4 || opts.ver === 6 ? opts.ver : 0;
+  const withTrace = opts.withTrace !== false;
   const rows = [];
   let row = [];
-  // Telegram 單則訊息 inline_keyboard 上限為 100 顆按鈕，保留 1 顆給底部的「立即檢測」
-  (node.targets || []).slice(0, 99).forEach((t, i) => {
-    row.push({ text: `${ISP_ICON[t.isp] || "⚪️"} ${targetName(L, t)}${t.v === 6 ? " v6" : ""}${t.big ? " " + I18N.t(L, "big.short") : ""}`, callback_data: `d:${node.uuid}:${i}` });
-    if (row.length === 3) { rows.push(row); row = []; }
+  // Telegram 單則訊息 inline_keyboard 上限為 100 顆按鈕；有底部「立即檢測」時保留 1 顆
+  const maxBtns = withTrace ? 99 : 100;
+  const items = [];
+  (node.targets || []).forEach((t, i) => {
+    if (ver && (t.v || 4) !== ver) return;
+    items.push({ t, i });
   });
+  for (const { t, i } of items.slice(0, maxBtns)) {
+    const vTag = !ver && t.v === 6 ? " v6" : "";
+    row.push({ text: `${ISP_ICON[t.isp] || "⚪️"} ${targetName(L, t)}${vTag}${t.big ? " " + I18N.t(L, "big.short") : ""}`, callback_data: `d:${node.uuid}:${i}` });
+    if (row.length === 3) { rows.push(row); row = []; }
+  }
   if (row.length) rows.push(row);
-  rows.push([{ text: I18N.t(L, "tg.btnTrace"), callback_data: `t:${node.uuid}` }]);
-  return { reply_markup: { inline_keyboard: rows } };
+  if (withTrace) rows.push([{ text: I18N.t(L, "tg.btnTrace"), callback_data: `t:${node.uuid}` }]);
+  return rows.length ? { reply_markup: { inline_keyboard: rows } } : {};
+}
+
+// 雙棧節點分兩則訊息送出：IPv4（標準＋大包）一則、IPv6（標準＋大包）一則；
+// 單棧或無目標時維持一則。若有 replaceMessageId，第一則優先編輯原訊息。
+async function sendNode(cfg, L, chatId, node, opts) {
+  opts = opts || {};
+  const targets = node.targets || [];
+  const hasV4 = targets.some((t) => (t.v || 4) === 4);
+  const hasV6 = targets.some((t) => t.v === 6);
+  const sendFirst = (text, extra) => opts.replaceMessageId
+    ? replace(cfg, chatId, opts.replaceMessageId, text, extra)
+    : send(cfg, chatId, text, extra);
+  if (hasV4 && hasV6) {
+    await sendFirst(
+      fmtNode(L, node, { running: opts.running, ver: 4 }),
+      nodeButtons(L, node, { ver: 4, withTrace: false }),
+    );
+    return send(
+      cfg,
+      chatId,
+      fmtNode(L, node, { running: opts.running, ver: 6, showError: false }),
+      nodeButtons(L, node, { ver: 6, withTrace: true }),
+    );
+  }
+  return sendFirst(fmtNode(L, node, { running: opts.running }), nodeButtons(L, node));
 }
 
 // ---------- 指令 ----------
@@ -219,7 +280,7 @@ async function cmdRoute(cfg, L, chatId, q) {
   if (!c) return;
   const n = storedNode(c);
   n.name = c.name;
-  return send(cfg, chatId, fmtNode(L, n, { running: deps.isRunning(c.uuid) }), nodeButtons(L, n));
+  return sendNode(cfg, L, chatId, n, { running: deps.isRunning(c.uuid) });
 }
 
 async function cmdTrace(cfg, L, chatId, args) {
@@ -261,11 +322,10 @@ async function cmdTrace(cfg, L, chatId, args) {
   const out = await r.done;
   const uuids = Object.keys(out);
   if (uuids.length === 1) {
-    const n = out[uuids[0]];
-    return replace(cfg, chatId, msg.message_id, fmtNode(L, n), nodeButtons(L, n));
+    return sendNode(cfg, L, chatId, out[uuids[0]], { replaceMessageId: msg.message_id });
   }
   await replace(cfg, chatId, msg.message_id, I18N.t(L, "tg.done", { n: uuids.length, x: esc(names) }));
-  for (const u of uuids) await send(cfg, chatId, fmtNode(L, out[u]), nodeButtons(L, out[u]));
+  for (const u of uuids) await sendNode(cfg, L, chatId, out[u]);
 }
 
 async function cmdStatus(cfg, L, chatId) {
@@ -344,7 +404,7 @@ async function handleCallback(cfg, cq) {
   await api(cfg, "answerCallbackQuery", { callback_query_id: cq.id });
   const n = storedNode(c);
   n.name = c.name;
-  if (kind === "r") return send(cfg, chatId, fmtNode(L, n, { running: deps.isRunning(c.uuid) }), nodeButtons(L, n));
+  if (kind === "r") return sendNode(cfg, L, chatId, n, { running: deps.isRunning(c.uuid) });
   if (kind === "d") {
     const t = (n.targets || [])[Number(idx)];
     if (!t) return send(cfg, chatId, I18N.t(L, "tg.noTarget"));
