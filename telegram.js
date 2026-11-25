@@ -433,6 +433,7 @@ const NET_FAMILY = { CTGNet: "ct", "CN2 GIA": "ct", "CN2 GT": "ct", CN2: "ct", "
 function routeSummary(t) {
   const r = t.route;
   if (!r || !r.chip) return null; // 舊格式的結果不比較，避免插件更新後誤報
+  if (r.connect === "unknown" || r.intl_unknown) return null; // AS 查詢失敗的那次不比較，避免誤報
   // 第一行開頭是交接業者時先去掉（交接業者另外比較）
   const withTransit = !!r.handover && (r.chain || [])[0] === r.handover;
   const nets = (r.chain || []).slice(withTransit ? 1 : 0);

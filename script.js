@@ -121,7 +121,66 @@ function buildCommand(cfg, targets) {
   ].join("\n");
 }
 
-function buildNodeResult(client, cfg, output, exitCode, targets) {
+// ---- AS 補查 ----
+// nexttrace 的 IP 資料 API 失敗時（位置顯示「网络故障」），跳點沒有 AS，國際業者會整段看不到。
+// 由 Komari 主機向 RIPEstat 補查這些跳點的 AS 與名稱；結果快取在記憶體，避免重複查詢。
+const RIPE = "https://stat.ripe.net/data";
+const asnCache = new Map(); // ip → { asn, owner } | null
+const holderCache = new Map(); // asn → 名稱
+async function fetchJSON(url, ms) {
+  return Promise.race([
+    fetch(url, { headers: { Accept: "application/json" } }).then((r) => (r.ok ? r.json() : null)),
+    sleep(ms || 6000).then(() => { throw new Error("timeout"); }),
+  ]);
+}
+function shortHolder(h) {
+  // 「LEVEL3 - Level 3 Parent, LLC」→「Level 3 Parent」
+  let s = String(h || "").split(" - ").pop().trim();
+  s = s.replace(/,?\s*(LLC|Inc\.?|Ltd\.?|Limited|Co\.,? ?Ltd\.?|Corporation|Corp\.?|GmbH|B\.V\.|K\.K\.)$/i, "").trim();
+  return s;
+}
+async function lookupASN(ip) {
+  if (asnCache.has(ip)) return asnCache.get(ip);
+  let out = null;
+  try {
+    const j = await fetchJSON(`${RIPE}/network-info/data.json?resource=${encodeURIComponent(ip)}&sourceapp=komari-cnroute`);
+    const asn = Number(((j && j.data && j.data.asns) || [])[0]) || 0;
+    if (asn) {
+      let owner = holderCache.get(asn);
+      if (owner === undefined) {
+        try {
+          const o = await fetchJSON(`${RIPE}/as-overview/data.json?resource=AS${asn}&sourceapp=komari-cnroute`);
+          owner = shortHolder(o && o.data && o.data.holder);
+        } catch (_) { owner = ""; }
+        holderCache.set(asn, owner);
+      }
+      out = { asn, owner };
+    }
+    asnCache.set(ip, out);
+  } catch (_) { /* 查不到就維持原樣（不快取，下次再試） */ }
+  if (asnCache.size > 5000) asnCache.clear();
+  return out;
+}
+async function enrichHops(hops) {
+  const need = hops.filter((h) => h.ip && !h.asn && !lib.isPrivateIP(h.ip) && !lib.prefixInfo(h.ip));
+  const ips = [...new Set(need.map((h) => h.ip))].slice(0, 40);
+  const found = {};
+  for (let i = 0; i < ips.length; i += 4) {
+    const part = ips.slice(i, i + 4);
+    const res = await Promise.all(part.map(lookupASN));
+    part.forEach((ip, k) => { if (res[k]) found[ip] = res[k]; });
+  }
+  for (const h of need) {
+    const f = found[h.ip];
+    if (!f) continue;
+    h.asn = f.asn;
+    if (!h.owner) h.owner = f.owner;
+    delete h.lookup_failed;
+  }
+  return hops;
+}
+
+async function buildNodeResult(client, cfg, output, exitCode, targets) {
   const parsed = lib.parseOutput(output);
   const node = {
     uuid: client.uuid,
@@ -139,6 +198,7 @@ function buildNodeResult(client, cfg, output, exitCode, targets) {
     const v = t.v || (t.ip.includes(":") ? 6 : 4);
     const noteErr = (note) => { const [k, ...rest] = String(note).split(" "); return k === "resolve" ? { k, p: { x: rest.join(" ") } } : { k }; };
     if (!b || b.note) { node.targets.push({ label: t.label, region: t.region || "", custom: t.custom || "", big: !!t.big, psize: t.psize || 0, port: t.port || 0, v, isp: t.isp, ip: t.ip, error: b ? noteErr(b.note) : { k: "noResult" }, segments: [], tags: [] }); continue; }
+    await enrichHops(b.hops);
     const src = v === 6 ? client.ipv6 : client.ipv4;
     const comp = lib.compressPath(b.hops, { maskMode: cfg.maskMode, maskFirstAS: cfg.maskFirstAS, srcIP: src });
     // 網域目標以伺服器解析出的 IP 判斷是否到達
@@ -161,7 +221,7 @@ function buildNodeResult(client, cfg, output, exitCode, targets) {
       hop_count: b.hops.length,
       last_rtt: comp.last_rtt,
       tags: cls.tags,
-      route: { line: cls.line, carrier: cls.carrier, cross: cls.cross, confidence: cls.confidence, ev: cls.ev || [], intl: cls.intl, intl_note: cls.intl_note || null, cross_to: cls.cross_to || "", handover: cls.handover || "", handoff_delta: cls.handoff_delta, transit_shown: cls.transit_shown,
+      route: { line: cls.line, carrier: cls.carrier, cross: cls.cross, confidence: cls.confidence, ev: cls.ev || [], intl: cls.intl, intl_note: cls.intl_note || null, intl_unknown: !!cls.intl_unknown, handoff_jump: cls.handoff_jump, cross_to: cls.cross_to || "", handover: cls.handover || "", handoff_delta: cls.handoff_delta, transit_shown: cls.transit_shown,
         short: cls.short, access: cls.access, carrier_name: cls.carrier_name, cross_text: cls.cross_text || "", connect: cls.connect || "",
         chain: cls.chain || [], chain_text: cls.chain_text || "", chain_full: cls.chain_full || [], chain_full_text: cls.chain_full_text || "", chip: cls.chip || "" },
       as_path: comp.segments.filter((s) => s.key !== "LAN").map((s) => s.key).join(" → "),
@@ -249,7 +309,7 @@ async function runGroup(cfg, map, uuids, targets, opts) {
         if (!pending.has(r.client) || !r.finished_at) continue;
         pending.delete(r.client);
         delete running[r.client];
-        const node = buildNodeResult(map[r.client], cfg, r.result, r.exit_code, targets);
+        const node = await buildNodeResult(map[r.client], cfg, r.result, r.exit_code, targets);
         out[r.client] = node;
         if (store) {
           const prev = results[r.client];

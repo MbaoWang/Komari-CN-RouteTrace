@@ -284,7 +284,23 @@ function parseTraceroute(text) {
   return hops;
 }
 
+// nexttrace 的 IP 資料 API 連不上時，位置 / 業者欄位會變成「网络故障」等字樣，AS 也查不到。
+// 清掉這些字樣（不當成地名），查不到 AS 的跳點標記 lookup_failed，之後由插件改用 RIPEstat 補查。
+const LOOKUP_FAIL = /网络故障|網路故障|网络错误|網路錯誤|network\s*(error|failure)|api\s*error/i;
+function cleanHops(hops) {
+  for (const h of hops) {
+    let failed = false;
+    if (LOOKUP_FAIL.test(h.geo || "")) { h.geo = ""; failed = true; }
+    if (LOOKUP_FAIL.test(h.owner || "")) { h.owner = ""; failed = true; }
+    if (failed && h.ip && !h.asn) h.lookup_failed = true;
+  }
+  return hops;
+}
+
 function parseBlock(fmt, text) {
+  return cleanHops(parseBlockRaw(fmt, text));
+}
+function parseBlockRaw(fmt, text) {
   switch (fmt) {
     case "lines": {
       const h = parseLines(text);
@@ -322,6 +338,11 @@ function parseOutput(output) {
 }
 
 // ---- AS 壓縮 ----
+function ip16(ip) {
+  const s = String(ip || "");
+  return s.includes(":") ? s.toLowerCase().split(":").slice(0, 2).join(":") : s.split(".").slice(0, 2).join(".");
+}
+
 // ---- 位置校正 ----
 // nexttrace 標的位置有時是「註冊地」而非實際位置（例如香港註冊、實際在東京的 akari.hk 會標成「中国 香港」）。
 // 光在光纖中每 1 ms 來回最多約 100 km，延遲和伺服器最近的跳點只差幾 ms 的跳點，一定和伺服器在同一個城市。
@@ -364,8 +385,10 @@ function compressPath(hops, opts) {
     let asn = priv ? 0 : guessASN(h.ip) || h.asn;
     const key = priv ? "LAN" : asn ? "AS" + asn : "?";
     let seg = segs[segs.length - 1];
-    // 未知 AS 的單跳夾在同一 AS 之間時視為同段
-    if (!seg || (seg.key !== key && !(key === "?" && seg.key !== "LAN"))) {
+    // 未知 AS 的單跳夾在同一 AS 之間時視為同段；
+    // AS 查詢失敗的跳點不併入前一段（否則國際業者的跳點會被當成本機機房而遮罩），同一個 /16 的連續跳點才合併
+    const failedSplit = !priv && !asn && h.lookup_failed && seg && seg.last_ip && ip16(seg.last_ip) !== ip16(h.ip);
+    if (!seg || failedSplit || (seg.key !== key && !(key === "?" && seg.key !== "LAN"))) {
       seg = {
         key,
         asn,
@@ -386,6 +409,7 @@ function compressPath(hops, opts) {
     if (priv) shownIP = "LAN";
     else if (h.ip === opts.srcIP || (maskFirstAS && seg === firstPublicSeg)) shownIP = maskIP(h.ip, maskMode);
     seg.hops++;
+    if (!priv) seg.last_ip = h.ip;
     if (shownIP && !seg.ips.includes(shownIP) && seg.ips.length < 6) seg.ips.push(shownIP);
     if (!seg.name && h.owner) seg.name = h.owner;
     // geo_in：這段第一跳的位置，geo：最後一跳的位置（例如 CMI 從東京跨海到廣州）
@@ -401,6 +425,7 @@ function compressPath(hops, opts) {
     const s = segs.find((x) => x.key !== "LAN");
     if (s) { s.geo = ""; s.geo_in = ""; s.geo_orig = ""; }
   }
+  for (const s of segs) delete s.last_ip;
   return { segments: segs, last_rtt: lastRtt };
 }
 
@@ -436,7 +461,7 @@ function classify(hops, isp, dst, opts) {
     if (!h.ip || isPrivateIP(h.ip)) continue;
     const pi = prefixInfo(h.ip);
     const asn = pi ? pi.asn : h.asn || 0;
-    pub.push({ ip: h.ip, asn, owner: h.owner || "", bb: pi ? pi.bb : "", fam: familyOf(asn, h.owner), v6: h.ip.includes(":"), dst: !!dst && sameIP(h.ip, dst), rtt: typeof h.rtt === "number" ? h.rtt : null, idx: hi, geo: h.geo || "" });
+    pub.push({ ip: h.ip, asn, owner: h.owner || "", bb: pi ? pi.bb : "", fam: familyOf(asn, h.owner), v6: h.ip.includes(":"), failed: !!h.lookup_failed && !(pi && pi.asn), dst: !!dst && sameIP(h.ip, dst), rtt: typeof h.rtt === "number" ? h.rtt : null, idx: hi, geo: h.geo || "" });
   }
   const isV6 = pub.length ? pub[pub.length - 1].v6 : false;
   const res = { label: "", line: "", carrier: "", cross: false, confidence: "", evidence: "", intl: [], intl_text: "" };
@@ -451,7 +476,9 @@ function classify(hops, isp, dst, opts) {
     runs.push({ asn: h.asn, owner: h.owner });
   }
   res.intl = runs.slice(1).filter((r) => r.asn).map((r) => ({ asn: r.asn, name: I18N.INTL_AS[r.asn] || r.owner || "" }));
-  res.intl_note = { kind: res.intl.length ? "transit" : entry === 0 ? "inside" : "direct", ms: null, long: false, overseas: false };
+  // 入境前有跳點查不到 AS（nexttrace 的資料 API 失敗、RIPEstat 也查不到）：看不出經過哪些國際業者，不能當成直連
+  res.intl_unknown = before.some((h, k) => k > 0 && h.failed);
+  res.intl_note = { kind: res.intl_unknown && !res.intl.length ? "unknown" : res.intl.length ? "transit" : entry === 0 ? "inside" : "direct", ms: null, long: false, overseas: false };
 
   // 交接延遲：機房第一跳 → 第一個三網跳點之間增加的延遲。
   // 路由器回應 ICMP 常被降低優先而虛高，所以每一跳取「這跳以及之後所有跳點的最低延遲」。
@@ -620,6 +647,7 @@ function classify(hops, isp, dst, opts) {
   if (conf === "inferred" && res.path_clear && !ambiguous) conf = "confirmed";
   if (conf === "inferred" && !res.path_clear) ev.push(E(reached ? "ev.gap.entry" : "ev.gap.unreached"));
 
+  if (res.intl_unknown) { if (conf === "confirmed") conf = "inferred"; ev.push(E("ev.asUnknown")); }
   res.line = line;
   res.confidence = conf;
   res.ev = ev;
@@ -678,12 +706,14 @@ function classify(hops, isp, dst, opts) {
   const entryHop = entry >= 0 ? pub[entry] : null;
   const jump = lastIntlIdx >= 0 && entryHop && eff[lastIntlIdx] !== null && eff[entry] !== null ? Math.round((eff[entry] - eff[lastIntlIdx]) * 10) / 10 : null;
   res.handoff_jump = jump;
-  if (!last) res.connect = "direct";
+  if (!last) res.connect = res.intl_unknown ? "unknown" : "direct";
   else if (res.transit_shown) { res.connect = "long_haul"; showTransit = true; }
   else if (!res.handoff_overseas && res.handoff_geo_known) { res.connect = "local_transit"; showTransit = true; }
   else {
     res.connect = "overseas_transit";
-    const ownLeg = !!(entryHop && entryHop.overseas && (jump === null || jump < HANDOFF_JUMP_MS));
+    // 三網第一跳有位置時以位置為準（例如 CMI 223.120.2.x 標東京，即使它回應 ICMP 較慢、延遲看起來大跳，
+    // 也是 CMI 在東京接手）；沒有位置時才用「交接後延遲有沒有大跳」判斷
+    const ownLeg = !!(entryHop && entryHop.overseas && (entryHop.geo || jump === null || jump < HANDOFF_JUMP_MS));
     showTransit = !ownLeg;
     if (!ownLeg && jump !== null) res.ev.push(E("ev.gap.jump", { x: res.handover, ms: jump }));
     // 為什麼不寫業者：在海外就交給三網，跨海由三網自己的骨幹承載

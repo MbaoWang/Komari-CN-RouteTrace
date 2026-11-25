@@ -27,7 +27,7 @@
       "carrier.ct": "電信", "carrier.cu": "聯通", "carrier.cm": "移動",
       "prov.ct": "電信省網", "prov.cu": "聯通省網", "prov.cm": "移動省網",
       "mix": "{x} 混合",
-      "access.direct": "直連", "access.long": "長途承載", "access.local": "當地交接", "access.overseas": "經 {x} 海外交接", "access.overseasShort": "海外交接",
+      "access.direct": "直連", "access.long": "長途承載", "access.local": "當地交接", "access.overseas": "經 {x} 海外交接", "access.overseasShort": "海外交接", "access.unknown": "國際段 AS 查詢失敗",
       "conf.inferred": "推測", "conf.insufficient": "證據不足", "unreached": "未到達",
       "none.short": "未入三網",
       "ev.none.noCarrier": "路徑上沒有出現電信 / 聯通 / 移動的 AS",
@@ -58,7 +58,7 @@
       "ev.cm.cmi": "經過 AS58453（CMI），未見 CMIN2",
       "ev.cm.cmnet": "直接進 CMNET 骨幹（221.183 / 111.24）", "ev.cm.cmnetv6": "直接進 CMNET 骨幹（2409:8080::）",
       "ev.cm.prov": "沒有經過 CMIN2 / CMI / CMNET 骨幹，直接進入移動當地網",
-      "ev.gap.entry": "交接點前有跳點沒有回應", "ev.gap.jump": "{x} 交接後延遲增加 {ms} ms，看不到三網自己的海外節點", "ev.ownLeg": "{x} 在海外（{g}）就交給 {n}，跨海由 {n} 自己的骨幹承載", "ev.ownLegNoGeo": "{x} 在海外就交給 {n}，跨海由 {n} 自己的骨幹承載", "ev.gap.unreached": "沒有到達目的地",
+      "ev.gap.entry": "交接點前有跳點沒有回應", "ev.asUnknown": "nexttrace 的 IP 資料查詢失敗（网络故障），部分跳點查不到 AS，看不出經過哪些國際業者", "intl.unknown": "部分跳點查不到 AS，無法判斷", "ev.gap.jump": "{x} 交接後延遲增加 {ms} ms，看不到三網自己的海外節點", "ev.ownLeg": "{x} 在海外（{g}）就交給 {n}，跨海由 {n} 自己的骨幹承載", "ev.ownLegNoGeo": "{x} 在海外就交給 {n}，跨海由 {n} 自己的骨幹承載", "ev.gap.unreached": "沒有到達目的地",
       "ev.cross": "{a}入境後才交給{b}", "ev.crossNear": "{a}入境後在目的地附近才交給{b}",
       "ev.sep": "；", "list.sep": "、",
       "intl.inside": "機房直接位於三網", "intl.direct": "機房直連三網",
@@ -103,7 +103,7 @@
       "carrier.ct": "电信", "carrier.cu": "联通", "carrier.cm": "移动",
       "prov.ct": "电信省网", "prov.cu": "联通省网", "prov.cm": "移动省网",
       "mix": "{x} 混合",
-      "access.direct": "直连", "access.long": "长途承载", "access.local": "当地交接", "access.overseas": "经 {x} 海外交接", "access.overseasShort": "海外交接",
+      "access.direct": "直连", "access.long": "长途承载", "access.local": "当地交接", "access.overseas": "经 {x} 海外交接", "access.overseasShort": "海外交接", "access.unknown": "国际段 AS 查询失败",
       "conf.inferred": "推测", "conf.insufficient": "证据不足", "unreached": "未到达",
       "none.short": "未入三网",
       "ev.none.noCarrier": "路径上没有出现电信 / 联通 / 移动的 AS",
@@ -134,7 +134,7 @@
       "ev.cm.cmi": "经过 AS58453（CMI），未见 CMIN2",
       "ev.cm.cmnet": "直接进 CMNET 骨干（221.183 / 111.24）", "ev.cm.cmnetv6": "直接进 CMNET 骨干（2409:8080::）",
       "ev.cm.prov": "没有经过 CMIN2 / CMI / CMNET 骨干，直接进入移动当地网",
-      "ev.gap.entry": "交接点前有跳点没有回应", "ev.gap.jump": "{x} 交接后延迟增加 {ms} ms，看不到三网自己的海外节点", "ev.ownLeg": "{x} 在海外（{g}）就交给 {n}，跨海由 {n} 自己的骨干承载", "ev.ownLegNoGeo": "{x} 在海外就交给 {n}，跨海由 {n} 自己的骨干承载", "ev.gap.unreached": "没有到达目的地",
+      "ev.gap.entry": "交接点前有跳点没有回应", "ev.asUnknown": "nexttrace 的 IP 数据查询失败（网络故障），部分跳点查不到 AS，看不出经过哪些国际运营商", "intl.unknown": "部分跳点查不到 AS，无法判断", "ev.gap.jump": "{x} 交接后延迟增加 {ms} ms，看不到三网自己的海外节点", "ev.ownLeg": "{x} 在海外（{g}）就交给 {n}，跨海由 {n} 自己的骨干承载", "ev.ownLegNoGeo": "{x} 在海外就交给 {n}，跨海由 {n} 自己的骨干承载", "ev.gap.unreached": "没有到达目的地",
       "ev.cross": "{a}入境后才交给{b}", "ev.crossNear": "{a}入境后在目的地附近才交给{b}",
       "ev.sep": "；", "list.sep": "、",
       "intl.inside": "机房直接位于三网", "intl.direct": "机房直连三网",
@@ -179,7 +179,7 @@
       "carrier.ct": "Telecom", "carrier.cu": "Unicom", "carrier.cm": "Mobile",
       "prov.ct": "Telecom provincial", "prov.cu": "Unicom provincial", "prov.cm": "Mobile provincial",
       "mix": "{x} mixed",
-      "access.direct": "Direct", "access.long": "Long-haul transit", "access.local": "Local handoff", "access.overseas": "Via {x}, handed off abroad", "access.overseasShort": "Handed off abroad",
+      "access.direct": "Direct", "access.long": "Long-haul transit", "access.local": "Local handoff", "access.overseas": "Via {x}, handed off abroad", "access.overseasShort": "Handed off abroad", "access.unknown": "Transit AS lookup failed",
       "conf.inferred": "Inferred", "conf.insufficient": "Insufficient evidence", "unreached": "Not reached",
       "none.short": "Not in China networks",
       "ev.none.noCarrier": "No China Telecom / Unicom / Mobile AS on the path",
@@ -210,7 +210,7 @@
       "ev.cm.cmi": "Via AS58453 (CMI), no CMIN2",
       "ev.cm.cmnet": "Directly into the CMNET backbone (221.183 / 111.24)", "ev.cm.cmnetv6": "Directly into the CMNET backbone (2409:8080::)",
       "ev.cm.prov": "No CMIN2 / CMI / CMNET backbone; enters the local Mobile network directly",
-      "ev.gap.entry": "Some hops before the handoff did not respond", "ev.gap.jump": "Latency rises {ms} ms after the {x} handoff; no overseas node of the China carrier is visible", "ev.ownLeg": "{x} hands over to {n} abroad ({g}); {n} carries it across the sea on its own backbone", "ev.ownLegNoGeo": "{x} hands over to {n} abroad; {n} carries it across the sea on its own backbone", "ev.gap.unreached": "Destination not reached",
+      "ev.gap.entry": "Some hops before the handoff did not respond", "ev.asUnknown": "nexttrace's IP lookup failed, so some hops have no AS and the transit carriers are unknown", "intl.unknown": "Some hops have no AS; cannot tell", "ev.gap.jump": "Latency rises {ms} ms after the {x} handoff; no overseas node of the China carrier is visible", "ev.ownLeg": "{x} hands over to {n} abroad ({g}); {n} carries it across the sea on its own backbone", "ev.ownLegNoGeo": "{x} hands over to {n} abroad; {n} carries it across the sea on its own backbone", "ev.gap.unreached": "Destination not reached",
       "ev.cross": "{a} carries it into China, then hands over to {b}", "ev.crossNear": "{a} carries it into China and hands over to {b} near the destination",
       "ev.sep": "; ", "list.sep": ", ",
       "intl.inside": "Server is inside a China carrier network", "intl.direct": "Server connects directly to China carriers",
@@ -255,7 +255,7 @@
       "carrier.ct": "電信", "carrier.cu": "聯通", "carrier.cm": "移動",
       "prov.ct": "電信 省内網", "prov.cu": "聯通 省内網", "prov.cm": "移動 省内網",
       "mix": "{x} 混在",
-      "access.direct": "直結", "access.long": "長距離中継", "access.local": "現地で引き渡し", "access.overseas": "{x} 経由・海外で引き渡し", "access.overseasShort": "海外で引き渡し",
+      "access.direct": "直結", "access.long": "長距離中継", "access.local": "現地で引き渡し", "access.overseas": "{x} 経由・海外で引き渡し", "access.overseasShort": "海外で引き渡し", "access.unknown": "国際区間の AS 照会に失敗",
       "conf.inferred": "推定", "conf.insufficient": "根拠不足", "unreached": "未到達",
       "none.short": "中国キャリア網外",
       "ev.none.noCarrier": "経路上に中国電信 / 聯通 / 移動の AS がありません",
@@ -286,7 +286,7 @@
       "ev.cm.cmi": "AS58453（CMI）経由、CMIN2 なし",
       "ev.cm.cmnet": "CMNET バックボーン（221.183 / 111.24）に直接入ります", "ev.cm.cmnetv6": "CMNET バックボーン（2409:8080::）に直接入ります",
       "ev.cm.prov": "CMIN2 / CMI / CMNET バックボーンを経由せず、地域の移動網に直接入ります",
-      "ev.gap.entry": "引き渡し前に応答しないホップがあります", "ev.gap.jump": "{x} での引き渡し後に遅延が {ms} ms 増加、中国キャリア自身の海外ノードは見えません", "ev.ownLeg": "{x} が海外（{g}）で {n} に引き渡し、海を越える区間は {n} 自身のバックボーン", "ev.ownLegNoGeo": "{x} が海外で {n} に引き渡し、海を越える区間は {n} 自身のバックボーン", "ev.gap.unreached": "宛先に到達していません",
+      "ev.gap.entry": "引き渡し前に応答しないホップがあります", "ev.asUnknown": "nexttrace の IP 情報照会に失敗し、一部のホップの AS が不明のため国際キャリアを判別できません", "intl.unknown": "一部のホップの AS が不明のため判別不可", "ev.gap.jump": "{x} での引き渡し後に遅延が {ms} ms 増加、中国キャリア自身の海外ノードは見えません", "ev.ownLeg": "{x} が海外（{g}）で {n} に引き渡し、海を越える区間は {n} 自身のバックボーン", "ev.ownLegNoGeo": "{x} が海外で {n} に引き渡し、海を越える区間は {n} 自身のバックボーン", "ev.gap.unreached": "宛先に到達していません",
       "ev.cross": "{a}が中国に入った後に{b}へ引き渡し", "ev.crossNear": "{a}が中国に入り、宛先付近で{b}へ引き渡し",
       "ev.sep": "；", "list.sep": "、",
       "intl.inside": "サーバーは中国キャリア網内にあります", "intl.direct": "サーバーは中国キャリアに直結",
@@ -421,6 +421,7 @@
     if (r.connect === "direct") return t(lang, "access.direct");
     if (r.connect === "long_haul") return t(lang, "access.long");
     if (r.connect === "local_transit") return t(lang, "access.local");
+    if (r.connect === "unknown") return t(lang, "access.unknown");
     if (r.connect === "overseas_transit") {
       // 第一行已經寫了「業者 → …」時，小字不再重複業者名稱
       if (r.handover && r.chain && r.chain[0] === r.handover) return t(lang, "access.overseasShort");
@@ -454,6 +455,7 @@
     if (!r) return "";
     if (!r.intl_note) return r.intl_text || "";
     var n = r.intl_note;
+    if (n.kind === "unknown") return t(lang, "intl.unknown");
     if (!r.intl || !r.intl.length) return t(lang, n.kind === "inside" ? "intl.inside" : "intl.direct");
     var list = r.intl.map(function (x) { return (asName(lang, x.asn, x.name) || "AS" + x.asn) + " (AS" + x.asn + ")"; }).join(" → ");
     if (n.ms === null || n.ms === undefined) return list;
@@ -470,8 +472,9 @@
     return s.name || "";
   }
   // 每段的位置與延遲：這段內位置或延遲有明顯變化時寫成「起 → 迄」，例如 CMI「日本 东京 → 中国 广东 广州 · 2.2 → 58.7 ms」
+  var LOOKUP_FAIL = /网络故障|網路故障|网络错误|網路錯誤/;
   function segGeo(s) {
-    if (!s || !s.geo) return "";
+    if (!s || !s.geo || LOOKUP_FAIL.test(s.geo)) return ""; // 舊結果裡 nexttrace 查詢失敗的字樣不當地名
     return s.geo_in && s.geo_in !== s.geo ? s.geo_in + " → " + s.geo : s.geo;
   }
   function segRtt(s) {
