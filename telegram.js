@@ -135,7 +135,7 @@ function fmtTarget(L, node, t) {
   for (const s of t.segments || []) {
     const rtt = s.rtt_out !== null && s.rtt_out !== undefined ? ` · ${s.rtt_out} ms` : "";
     const name = I18N.segName(L, s);
-    const geo = s.geo ? ` (${esc(s.geo)})` : "";
+    const geo = s.geo ? ` (${esc(s.geo)}${s.geo_orig ? "；" + esc(I18N.t(L, "seg.geoFixed", { x: s.geo_orig })) : ""})` : "";
     const ips = (s.ips || []).map((x) => (x === "LAN" || x === "內網" ? I18N.t(L, "seg.lanIp") : x));
     lines.push(`<b>${esc(s.key)}</b>${name ? " " + esc(name) : ""}${geo}`);
     lines.push(`   ${esc(I18N.t(L, "page.hops", { n: s.hops }))}${s.timeouts ? ` +${s.timeouts}*` : ""}${rtt}${ips.length ? "  <code>" + esc(ips.join(" ")) + "</code>" : ""}`);
@@ -433,7 +433,8 @@ const NET_FAMILY = { CTGNet: "ct", "CN2 GIA": "ct", "CN2 GT": "ct", CN2: "ct", "
 function routeSummary(t) {
   const r = t.route;
   if (!r || !r.chip) return null; // 舊格式的結果不比較，避免插件更新後誤報
-  const withTransit = r.connect === "long_haul" || r.connect === "local_transit";
+  // 第一行開頭是交接業者時先去掉（交接業者另外比較）
+  const withTransit = !!r.handover && (r.chain || [])[0] === r.handover;
   const nets = (r.chain || []).slice(withTransit ? 1 : 0);
   const classes = [];
   for (const n of nets) {

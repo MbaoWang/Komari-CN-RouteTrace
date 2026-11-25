@@ -261,7 +261,7 @@ function detailHTML(t) {
     return `
     <div class="seg ${s.key === "LAN" ? "lan" : ""}">
       <div class="asn">${esc(s.key)}</div>
-      <div><div>${esc(I.segName(L, s))}${s.geo ? ` <span class="sub">· ${esc(s.geo)}</span>` : ""}</div>
+      <div><div>${esc(I.segName(L, s))}${s.geo ? ` <span class="sub">· ${esc(s.geo)}${s.geo_orig ? esc(I.paren(L, T("seg.geoFixed", { x: s.geo_orig }))) : ""}</span>` : ""}</div>
         ${ips.length ? `<div class="ips">${ips.map(esc).join("　")}</div>` : ""}</div>
       <div class="hopn">${esc(T("page.hops", { n: s.hops }))}${s.timeouts ? ` +${s.timeouts}*` : ""}${s.rtt_out != null ? ` · ${s.rtt_out} ms` : ""}</div>
     </div>`;

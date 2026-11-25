@@ -322,12 +322,37 @@ function parseOutput(output) {
 }
 
 // ---- AS 壓縮 ----
+// ---- 位置校正 ----
+// nexttrace 標的位置有時是「註冊地」而非實際位置（例如香港註冊、實際在東京的 akari.hk 會標成「中国 香港」）。
+// 光在光纖中每 1 ms 來回最多約 100 km，延遲和伺服器最近的跳點只差幾 ms 的跳點，一定和伺服器在同一個城市。
+// 取這些近距離跳點多數標示的國家當作伺服器所在地，標成其他國家的改正，原本的標示留在 geo_orig。
+const NEAR_MS = 5;
+function geoCountry(g) { return String(g || "").trim().split(/\s+/)[0] || ""; }
+function fixGeo(hops) {
+  if (!Array.isArray(hops) || hops.some((h) => h && h.geo_orig !== undefined)) return hops;
+  const pubRtt = hops.filter((h) => h && h.ip && !isPrivateIP(h.ip) && typeof h.rtt === "number").map((h) => h.rtt);
+  if (!pubRtt.length) return hops;
+  const base = Math.min(...pubRtt);
+  const near = hops.filter((h) => h && h.ip && !isPrivateIP(h.ip) && h.geo && typeof h.rtt === "number" && h.rtt - base <= NEAR_MS);
+  const count = {};
+  for (const h of near) { const c = geoCountry(h.geo); count[c] = (count[c] || 0) + 1; }
+  const ranked = Object.entries(count).sort((a, b) => b[1] - a[1]);
+  // 至少兩跳一致、而且比其他國家多，才算確定
+  if (!ranked.length || ranked[0][1] < 2 || (ranked[1] && ranked[1][1] >= ranked[0][1])) return hops;
+  const home = ranked[0][0];
+  const full = {};
+  for (const h of near) if (geoCountry(h.geo) === home) full[h.geo] = (full[h.geo] || 0) + 1;
+  const homeGeo = Object.entries(full).sort((a, b) => b[1] - a[1])[0][0];
+  return hops.map((h) => (near.includes(h) && geoCountry(h.geo) !== home ? Object.assign({}, h, { geo: homeGeo, geo_orig: h.geo }) : h));
+}
+
 // 把連續同 AS 的跳點合併成一段；逾時(*) 的跳點併入前一段計數；
 // 內網段標為 LAN。第一個公網 AS（本機機房）內的 IP 會被遮罩。
 function compressPath(hops, opts) {
   opts = opts || {};
   const maskMode = opts.maskMode || "half";
   const maskFirstAS = opts.maskFirstAS !== false;
+  hops = fixGeo(hops);
   const segs = [];
   let lastRtt = null;
   for (const h of hops) {
@@ -363,7 +388,7 @@ function compressPath(hops, opts) {
     seg.hops++;
     if (shownIP && !seg.ips.includes(shownIP) && seg.ips.length < 6) seg.ips.push(shownIP);
     if (!seg.name && h.owner) seg.name = h.owner;
-    if (h.geo && !priv) seg.geo = h.geo;
+    if (h.geo && !priv) { seg.geo = h.geo; seg.geo_orig = h.geo_orig || ""; }
     if (h.rtt !== null && h.rtt !== undefined) {
       if (seg.rtt_in === null || seg.rtt_in === undefined) seg.rtt_in = h.rtt;
       seg.rtt_out = h.rtt;
@@ -373,7 +398,7 @@ function compressPath(hops, opts) {
   // 第一公網段的地理位置也會暴露本機，一併隱藏
   if (maskFirstAS) {
     const s = segs.find((x) => x.key !== "LAN");
-    if (s) s.geo = "";
+    if (s) { s.geo = ""; s.geo_orig = ""; }
   }
   return { segments: segs, last_rtt: lastRtt };
 }
@@ -398,9 +423,12 @@ function asLabel(asn, owner) {
 
 // dst：目標 IP。目的地本身那一跳不算骨幹證據（例如廣州聯通 IPv6 目標在 AS9929 宣告的位址段內）
 // opts.transitRtt：國際業者承載的延遲超過這個毫秒數，才在標籤寫出國際業者（預設 50）
+// 國際業者最後一跳 → 三網第一跳的延遲增加超過這個值，表示看不到三網自己的海外段
+const HANDOFF_JUMP_MS = 20;
 function classify(hops, isp, dst, opts) {
   opts = opts || {};
   const transitRtt = Number.isFinite(Number(opts.transitRtt)) ? Number(opts.transitRtt) : 50;
+  hops = fixGeo(hops);
   const pub = [];
   for (let hi = 0; hi < hops.length; hi++) {
     const h = hops[hi];
@@ -641,11 +669,23 @@ function classify(hops, isp, dst, opts) {
   //   直連：機房直接接三網                              → 只寫網路，例如「CN2 GIA」「CTGNet → 4134(163) → 4837(169)」
   //   海外交接：國際業者在海外就交給三網（例如 NTT 在聖荷西交給 163 的海外節點）→ 只寫網路「4134(163)」，業者寫在小字
   //   香港 / 國內交接、或國際業者長途承載            → 寫交接「Lumen → CMI」「Verizon → 4837(169)」
+  //   海外交接只在「看得到三網自己的海外節點、交接時延遲沒有跳一大段」時省略業者
+  //   （三網自己的國際線路帶回國，例如 NTT 在聖荷西交給 163 的 218.30.x）；
+  //   CMI / CMIN2 等國際網也一樣：在海外就交給 CMI、走移動自己的骨幹回國 → 只寫「CMI」；
+  //   交接後延遲大跳（看不到三網自己的海外段，例如 SoftBank 2.7 ms → CMI 52 ms）→ 寫「SoftBank → CMI」
   let showTransit = false;
+  const entryHop = entry >= 0 ? pub[entry] : null;
+  const jump = lastIntlIdx >= 0 && entryHop && eff[lastIntlIdx] !== null && eff[entry] !== null ? Math.round((eff[entry] - eff[lastIntlIdx]) * 10) / 10 : null;
+  res.handoff_jump = jump;
   if (!last) res.connect = "direct";
   else if (res.transit_shown) { res.connect = "long_haul"; showTransit = true; }
   else if (!res.handoff_overseas && res.handoff_geo_known) { res.connect = "local_transit"; showTransit = true; }
-  else res.connect = "overseas_transit";
+  else {
+    res.connect = "overseas_transit";
+    const ownLeg = !!(entryHop && entryHop.overseas && (jump === null || jump < HANDOFF_JUMP_MS));
+    showTransit = !ownLeg;
+    if (!ownLeg && jump !== null) res.ev.push(E("ev.gap.jump", { x: res.handover, ms: jump }));
+  }
 
   res.chain = (showTransit ? [res.handover] : []).concat(nets);
   // 完整走法：所有國際業者 + 經過的網路
@@ -735,4 +775,4 @@ function guessIsp(label) {
   return "";
 }
 
-module.exports = { I18N, ZSTATIC_PROVINCES, zstaticTargets, AS_NAMES, FAMILY_NAME, prefixInfo, familyOf, isPrivateIP, maskIP, parseOutput, parseBlock, compressPath, classify, parseTargets };
+module.exports = { fixGeo, I18N, ZSTATIC_PROVINCES, zstaticTargets, AS_NAMES, FAMILY_NAME, prefixInfo, familyOf, isPrivateIP, maskIP, parseOutput, parseBlock, compressPath, classify, parseTargets };
