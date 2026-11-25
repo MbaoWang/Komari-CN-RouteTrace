@@ -13,7 +13,7 @@
     "ja": "各サーバーから中国電信 / 聯通 / 移動への帰路を定期的にトレースし、AS ごとにまとめて CN2 GIA / GT、9929、CMIN2 などの回線を判定します。サーバー IP は自動でマスクされます。"
   },
   "author": "MbaoWang",
-  "version": "1.16.0",
+  "version": "1.16.1",
   "entry": "script.js",
   "permissions": {
     "node": true,
@@ -257,10 +257,10 @@
         "type": "number",
         "default": 1400,
         "help": {
-          "zh_TW": "64～9000；nexttrace 用 --psize、mtr 用 -s、traceroute 用封包長度參數",
-          "zh_CN": "64～9000；nexttrace 用 --psize、mtr 用 -s、traceroute 用封包长度参数",
-          "en": "64–9000; passed as --psize to nexttrace, -s to mtr, packet length to traceroute",
-          "ja": "64～9000；nexttrace は --psize、mtr は -s、traceroute はパケット長引数で指定"
+          "zh_TW": "64～9000；TCP 大包僅支援 nexttrace（--psize），mtr 與 traceroute 在 TCP SYN 模式下會忽略封包大小",
+          "zh_CN": "64～9000；TCP 大包仅支持 nexttrace（--psize），mtr 与 traceroute 在 TCP SYN 模式下会忽略封包大小",
+          "en": "64–9000; large TCP packets require nexttrace (--psize), as mtr and traceroute ignore packet size in TCP SYN mode",
+          "ja": "64～9000；TCP 大パケットは nexttrace（--psize）専用（mtr / traceroute は TCP SYN モードでパケット長を無視します）"
         }
       },
       {

@@ -86,10 +86,11 @@ for i,att in enumerate(hops):
 resolve() {
   local h="$1" v="$2" r=""
   if [ "$v" = 6 ]; then
-    r=$(getent ahostsv6 "$h" 2>/dev/null | awk 'NR==1{print $1}')
-    [ -z "$r" ] && have dig && r=$(dig +short AAAA "$h" 2>/dev/null | grep -E '^[0-9a-fA-F:]+$' | head -1)
+    # getent ahostsv6 在網域沒有 AAAA 時會回傳 ::ffff:<IPv4>（AI_V4MAPPED），必須過濾掉
+    r=$(getent ahostsv6 "$h" 2>/dev/null | awk '$1 !~ /^::[fF]{4}:/ && $1 ~ /:/ {print $1; exit}')
+    [ -z "$r" ] && have dig && r=$(dig +short AAAA "$h" 2>/dev/null | grep -E '^[0-9a-fA-F:]+$' | grep -iv '^::ffff:' | head -1)
   else
-    r=$(getent ahostsv4 "$h" 2>/dev/null | awk 'NR==1{print $1}')
+    r=$(getent ahostsv4 "$h" 2>/dev/null | awk '$1 ~ /^[0-9.]+$/ {print $1; exit}')
     [ -z "$r" ] && have dig && r=$(dig +short A "$h" 2>/dev/null | grep -E '^[0-9.]+$' | head -1)
   fi
   echo "$r"
@@ -100,7 +101,10 @@ run_one() {
   {
     ip="$target"
     case "$target" in
-      *[!0-9a-fA-F:.]*) ip="$(resolve "$target" "$ver")" ;;
+      *:*)
+        case "$target" in *[!0-9a-fA-F:.]*) ip="$(resolve "$target" "$ver")" ;; esac ;;
+      *[!0-9.]*)
+        ip="$(resolve "$target" "$ver")" ;;
     esac
     if [ -z "$ip" ]; then
       echo "##BEGIN $id - none"
@@ -113,6 +117,13 @@ run_one() {
     if [ -n "$fam" ] && have ip && ! ip -6 route get "$ip" >/dev/null 2>&1; then
       echo "##BEGIN $id $ip none"
       echo "##NOTE noIpv6"
+      echo "##END $id"
+      return
+    fi
+    # mtr(8) 與 Linux traceroute(8) 在 TCP SYN 模式下會靜默忽略封包大小參數，只有 nexttrace 支援 TCP 大封包
+    if [ "$proto" = tcp ] && [ -n "$psize" ] && [ "$T" != nexttrace ]; then
+      echo "##BEGIN $id $ip none"
+      echo "##NOTE bigNeedNt $T"
       echo "##END $id"
       return
     fi

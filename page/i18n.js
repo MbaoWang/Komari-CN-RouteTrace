@@ -66,7 +66,7 @@
       "intl.shortOverseas": "；國際業者只承載 {ms} ms（在海外就交給三網，非直連）",
       "intl.shortLocal": "；國際業者只承載 {ms} ms（在當地就交給三網，非直連）",
       "seg.lan": "內網 / 本機閘道", "seg.lanIp": "內網", "seg.unknown": "未知 AS", "seg.local": "中國{x} 當地網", "seg.geoFixed": "依延遲修正，nexttrace 標示為 {x}",
-      "err.login": "需要登入", "err.adminOnly": "僅管理員可觸發", "err.noResult": "沒有結果", "err.noIpv6": "此伺服器沒有 IPv6 路由", "err.resolve": "無法解析網域 {x}",
+      "err.login": "需要登入", "err.adminOnly": "僅管理員可觸發", "err.noResult": "沒有結果", "err.noIpv6": "此伺服器沒有 IPv6 路由", "err.resolve": "無法解析網域 {x}", "err.bigNeedNt": "{x} 的 TCP 模式不支援大封包，請安裝 nexttrace",
       "err.timeout": "等待結果逾時（agent 離線、未開放遠端執行，或探測時間過長）",
       "err.exec": "執行失敗 (exit {code})：{x}", "err.noTool": "找不到 nexttrace / mtr / traceroute，請在此伺服器安裝其中之一（建議 nexttrace 或 mtr）",
       "err.notSelected": "這台伺服器沒有被選入 IPv4 或 IPv6 檢測（請到插件設定選擇伺服器）",
@@ -95,7 +95,7 @@
       "tg.statusVOn": "{t} 個目標，{s}", "tg.statusAll": "全部伺服器", "tg.statusN": "{n} 台伺服器", "tg.off": "關閉", "tg.on": "開啟",
       "tg.statusInterval": "自動檢測：每 {n} 分鐘", "tg.statusNotify": "線路變更通知：{x}", "tg.statusBusy": "檢測中：{x}", "tg.nothing": "無",
       "tg.changed": "⚠️ <b>{x}</b> 回程線路變更", "tg.chgTransit": "交接業者：{a} → {b}", "tg.noTransit": "無（直連）",
-      "tg.chgConnect": "接入方式：{a} → {b}", "tg.chgEntry": "入境網路：{a} → {b}", "tg.chgCarriers": "途經電信商：{a} → {b}",
+      "tg.chgConnect": "接入方式：{a} → {b}", "tg.chgEntry": "入境網路：{a} → {b}", "tg.chgCarriers": "途經電信商：{a} → {b}", "tg.chgRoute": "路徑網路：{a} → {b}",
       "tg.before": "原本", "tg.after": "現在", "tg.connect.overseas": "海外交接", "tg.generic.ct": "電信 163", "tg.generic.cu": "聯通 4837", "tg.generic.cm": "移動 9808",
       "tg.timeSep": "·"
     },
@@ -142,7 +142,7 @@
       "intl.shortOverseas": "；国际运营商只承载 {ms} ms（在海外就交给三网，非直连）",
       "intl.shortLocal": "；国际运营商只承载 {ms} ms（在当地就交给三网，非直连）",
       "seg.lan": "内网 / 本机网关", "seg.lanIp": "内网", "seg.unknown": "未知 AS", "seg.local": "中国{x} 当地网", "seg.geoFixed": "依延迟修正，nexttrace 标示为 {x}",
-      "err.login": "需要登录", "err.adminOnly": "仅管理员可触发", "err.noResult": "没有结果", "err.noIpv6": "此服务器没有 IPv6 路由", "err.resolve": "无法解析域名 {x}",
+      "err.login": "需要登录", "err.adminOnly": "仅管理员可触发", "err.noResult": "没有结果", "err.noIpv6": "此服务器没有 IPv6 路由", "err.resolve": "无法解析域名 {x}", "err.bigNeedNt": "{x} 的 TCP 模式不支持大封包，请安装 nexttrace",
       "err.timeout": "等待结果超时（agent 离线、未开放远程执行，或探测时间过长）",
       "err.exec": "执行失败 (exit {code})：{x}", "err.noTool": "找不到 nexttrace / mtr / traceroute，请在此服务器安装其中之一（建议 nexttrace 或 mtr）",
       "err.notSelected": "这台服务器没有被选入 IPv4 或 IPv6 检测（请到插件设置选择服务器）",
@@ -171,7 +171,7 @@
       "tg.statusVOn": "{t} 个目标，{s}", "tg.statusAll": "全部服务器", "tg.statusN": "{n} 台服务器", "tg.off": "关闭", "tg.on": "开启",
       "tg.statusInterval": "自动检测：每 {n} 分钟", "tg.statusNotify": "线路变更通知：{x}", "tg.statusBusy": "检测中：{x}", "tg.nothing": "无",
       "tg.changed": "⚠️ <b>{x}</b> 回程线路变更", "tg.chgTransit": "交接运营商：{a} → {b}", "tg.noTransit": "无（直连）",
-      "tg.chgConnect": "接入方式：{a} → {b}", "tg.chgEntry": "入境网络：{a} → {b}", "tg.chgCarriers": "途经运营商：{a} → {b}",
+      "tg.chgConnect": "接入方式：{a} → {b}", "tg.chgEntry": "入境网络：{a} → {b}", "tg.chgCarriers": "途经运营商：{a} → {b}", "tg.chgRoute": "路径网络：{a} → {b}",
       "tg.before": "原本", "tg.after": "现在", "tg.connect.overseas": "海外交接", "tg.generic.ct": "电信 163", "tg.generic.cu": "联通 4837", "tg.generic.cm": "移动 9808",
       "tg.timeSep": "·"
     },
@@ -218,7 +218,7 @@
       "intl.shortOverseas": "; transit carried only {ms} ms (handed to China carriers abroad, not direct)",
       "intl.shortLocal": "; transit carried only {ms} ms (handed to China carriers locally, not direct)",
       "seg.lan": "LAN / local gateway", "seg.lanIp": "LAN", "seg.unknown": "Unknown AS", "seg.local": "China {x} local network", "seg.geoFixed": "corrected by latency; nexttrace said {x}",
-      "err.login": "Login required", "err.adminOnly": "Admins only", "err.noResult": "No result", "err.noIpv6": "This server has no IPv6 route", "err.resolve": "Could not resolve {x}",
+      "err.login": "Login required", "err.adminOnly": "Admins only", "err.noResult": "No result", "err.noIpv6": "This server has no IPv6 route", "err.resolve": "Could not resolve {x}", "err.bigNeedNt": "{x} ignores packet size in TCP mode; install nexttrace",
       "err.timeout": "Timed out waiting for the result (agent offline, remote execution disabled, or the trace took too long)",
       "err.exec": "Execution failed (exit {code}): {x}", "err.noTool": "nexttrace / mtr / traceroute not found; install one of them on this server (nexttrace or mtr recommended)",
       "err.notSelected": "This server is not selected for IPv4 or IPv6 checks (choose servers in the plugin settings)",
@@ -247,7 +247,7 @@
       "tg.statusVOn": "{t} targets, {s}", "tg.statusAll": "all servers", "tg.statusN": "{n} servers", "tg.off": "off", "tg.on": "on",
       "tg.statusInterval": "Auto check: every {n} min", "tg.statusNotify": "Route change alerts: {x}", "tg.statusBusy": "Checking: {x}", "tg.nothing": "none",
       "tg.changed": "⚠️ <b>{x}</b> return route changed", "tg.chgTransit": "Transit: {a} → {b}", "tg.noTransit": "none (direct)",
-      "tg.chgConnect": "Access: {a} → {b}", "tg.chgEntry": "Entry network: {a} → {b}", "tg.chgCarriers": "Carriers on the way: {a} → {b}",
+      "tg.chgConnect": "Access: {a} → {b}", "tg.chgEntry": "Entry network: {a} → {b}", "tg.chgCarriers": "Carriers on the way: {a} → {b}", "tg.chgRoute": "Route networks: {a} → {b}",
       "tg.before": "Before", "tg.after": "Now", "tg.connect.overseas": "Handoff abroad", "tg.generic.ct": "Telecom 163", "tg.generic.cu": "Unicom 4837", "tg.generic.cm": "Mobile 9808",
       "tg.timeSep": "·"
     },
@@ -294,7 +294,7 @@
       "intl.shortOverseas": "；国際キャリアの中継は {ms} ms のみ（海外で中国キャリアへ引き渡し、直結ではない）",
       "intl.shortLocal": "；国際キャリアの中継は {ms} ms のみ（現地で中国キャリアへ引き渡し、直結ではない）",
       "seg.lan": "LAN / ローカルゲートウェイ", "seg.lanIp": "LAN", "seg.unknown": "不明な AS", "seg.local": "中国{x} 地域網", "seg.geoFixed": "遅延から補正（nexttrace の表示：{x}）",
-      "err.login": "ログインが必要です", "err.adminOnly": "管理者のみ実行できます", "err.noResult": "結果なし", "err.noIpv6": "このサーバーには IPv6 経路がありません", "err.resolve": "{x} を名前解決できません",
+      "err.login": "ログインが必要です", "err.adminOnly": "管理者のみ実行できます", "err.noResult": "結果なし", "err.noIpv6": "このサーバーには IPv6 経路がありません", "err.resolve": "{x} を名前解決できません", "err.bigNeedNt": "{x} の TCP モードは大パケット非対応のため nexttrace を導入してください",
       "err.timeout": "結果待ちがタイムアウトしました（agent がオフライン、リモート実行が無効、またはトレースに時間がかかりすぎ）",
       "err.exec": "実行失敗 (exit {code})：{x}", "err.noTool": "nexttrace / mtr / traceroute が見つかりません。このサーバーにいずれかをインストールしてください（nexttrace か mtr 推奨）",
       "err.notSelected": "このサーバーは IPv4 / IPv6 の検査対象に選ばれていません（プラグイン設定で選択してください）",
@@ -323,7 +323,7 @@
       "tg.statusVOn": "対象 {t} 件、{s}", "tg.statusAll": "全サーバー", "tg.statusN": "{n} 台", "tg.off": "オフ", "tg.on": "オン",
       "tg.statusInterval": "自動検査：{n} 分ごと", "tg.statusNotify": "ルート変更通知：{x}", "tg.statusBusy": "検査中：{x}", "tg.nothing": "なし",
       "tg.changed": "⚠️ <b>{x}</b> の帰路ルートが変わりました", "tg.chgTransit": "引き渡し事業者：{a} → {b}", "tg.noTransit": "なし（直結）",
-      "tg.chgConnect": "接続方式：{a} → {b}", "tg.chgEntry": "入国ネットワーク：{a} → {b}", "tg.chgCarriers": "経由キャリア：{a} → {b}",
+      "tg.chgConnect": "接続方式：{a} → {b}", "tg.chgEntry": "入国ネットワーク：{a} → {b}", "tg.chgCarriers": "経由キャリア：{a} → {b}", "tg.chgRoute": "経路ネットワーク：{a} → {b}",
       "tg.before": "以前", "tg.after": "現在", "tg.connect.overseas": "海外で引き渡し", "tg.generic.ct": "電信 163", "tg.generic.cu": "聯通 4837", "tg.generic.cm": "移動 9808",
       "tg.timeSep": "·"
     }
@@ -490,7 +490,7 @@
   }
   function ago(lang, iso) {
     if (!iso) return t(lang, "ago.never");
-    var s = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
+    var s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
     if (s < 60) return t(lang, "ago.s", { n: s });
     if (s < 3600) return t(lang, "ago.m", { n: Math.round(s / 60) });
     if (s < 86400) return t(lang, "ago.h", { n: Math.round(s / 3600) });

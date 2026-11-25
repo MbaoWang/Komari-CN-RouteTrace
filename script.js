@@ -109,7 +109,7 @@ async function listClients() {
 }
 
 function buildCommand(cfg, targets) {
-  const protoOf = (t) => t.proto || (cfg.traceProto === "auto" ? (/[g-z]/i.test(t.ip) ? "tcp" : "icmp") : cfg.traceProto);
+  const protoOf = (t) => t.proto || (cfg.traceProto === "auto" ? (lib.isIP(t.ip) ? "icmp" : "tcp") : cfg.traceProto);
   const args = targets.map((t) => `${t.id}=${t.ip},${t.port || 80},${protoOf(t)},${t.v || 4}` + (t.psize ? "," + t.psize : "")).join(" ");
   // base64 包裝，避免 shell 引號問題
   // agent 以 `sh -s` 從 stdin 讀指令，子程序 stdin 要導到 /dev/null 以免吃掉後續指令
@@ -124,14 +124,44 @@ function buildCommand(cfg, targets) {
 // ---- AS 補查 ----
 // nexttrace 的 IP 資料 API 失敗時（位置顯示「网络故障」），跳點沒有 AS，國際業者會整段看不到。
 // 由 Komari 主機向 RIPEstat 補查這些跳點的 AS 與名稱；結果快取在記憶體，避免重複查詢。
+// RIPEstat 限制單一 IP 最多 8 個併發請求，全域節流在 4 個以內並合併同時查同 IP 的請求。
 const RIPE = "https://stat.ripe.net/data";
 const asnCache = new Map(); // ip → { asn, owner } | null
+const asnInFlight = new Map(); // ip → Promise
 const holderCache = new Map(); // asn → 名稱
+let ripeActive = 0;
+const ripeQueue = [];
+function withRipeSlot(fn) {
+  return new Promise((resolve, reject) => {
+    const run = () => {
+      ripeActive++;
+      Promise.resolve().then(fn).then(resolve, reject).finally(() => {
+        ripeActive--;
+        if (ripeQueue.length) ripeQueue.shift()();
+      });
+    };
+    if (ripeActive < 4) run();
+    else ripeQueue.push(run);
+  });
+}
 async function fetchJSON(url, ms) {
-  return Promise.race([
-    fetch(url, { headers: { Accept: "application/json" } }).then((r) => (r.ok ? r.json() : null)),
-    sleep(ms || 6000).then(() => { throw new Error("timeout"); }),
-  ]);
+  return withRipeSlot(async () => {
+    const ctrl = typeof AbortController === "function" ? new AbortController() : null;
+    let timer;
+    const timeout = new Promise((_, rej) => {
+      timer = setTimeout(() => { if (ctrl) ctrl.abort(); rej(new Error("timeout")); }, ms || 6000);
+    });
+    try {
+      const r = await Promise.race([
+        fetch(url, { headers: { Accept: "application/json" }, signal: ctrl ? ctrl.signal : undefined }),
+        timeout,
+      ]);
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return await r.json();
+    } finally {
+      clearTimeout(timer);
+    }
+  });
 }
 function shortHolder(h) {
   // 「LEVEL3 - Level 3 Parent, LLC」→「Level 3 Parent」
@@ -141,35 +171,49 @@ function shortHolder(h) {
 }
 async function lookupASN(ip) {
   if (asnCache.has(ip)) return asnCache.get(ip);
-  let out = null;
-  try {
-    const j = await fetchJSON(`${RIPE}/network-info/data.json?resource=${encodeURIComponent(ip)}&sourceapp=komari-cnroute`);
-    const asn = Number(((j && j.data && j.data.asns) || [])[0]) || 0;
-    if (asn) {
-      let owner = holderCache.get(asn);
-      if (owner === undefined) {
-        try {
-          const o = await fetchJSON(`${RIPE}/as-overview/data.json?resource=AS${asn}&sourceapp=komari-cnroute`);
-          owner = shortHolder(o && o.data && o.data.holder);
-        } catch (_) { owner = ""; }
-        holderCache.set(asn, owner);
+  if (asnInFlight.has(ip)) return asnInFlight.get(ip);
+  const p = (async () => {
+    let out = null;
+    try {
+      const j = await fetchJSON(`${RIPE}/network-info/data.json?resource=${encodeURIComponent(ip)}&sourceapp=komari-cnroute`);
+      if (!j || j.status !== "ok") return null;
+      const asn = Number(((j.data && j.data.asns) || [])[0]) || 0;
+      if (asn) {
+        let owner = holderCache.get(asn);
+        if (owner === undefined) {
+          try {
+            const o = await fetchJSON(`${RIPE}/as-overview/data.json?resource=AS${asn}&sourceapp=komari-cnroute`);
+            if (o && o.status === "ok") {
+              owner = shortHolder(o.data && o.data.holder);
+              holderCache.set(asn, owner);
+            } else {
+              owner = "";
+            }
+          } catch (_) { owner = ""; }
+        }
+        out = { asn, owner };
       }
-      out = { asn, owner };
-    }
-    asnCache.set(ip, out);
-  } catch (_) { /* 查不到就維持原樣（不快取，下次再試） */ }
-  if (asnCache.size > 5000) asnCache.clear();
-  return out;
+      asnCache.set(ip, out);
+    } catch (_) { /* 查不到或 HTTP 429/5xx 時不快取，下次再試 */ }
+    if (asnCache.size > 5000) asnCache.clear();
+    return out;
+  })();
+  asnInFlight.set(ip, p);
+  try { return await p; } finally { asnInFlight.delete(ip); }
+}
+async function lookupSrcASN(ip) {
+  if (!ip || !lib.isIP(ip) || lib.isPrivateIP(ip)) return 0;
+  const pi = lib.prefixInfo(ip);
+  if (pi && pi.asn) return pi.asn;
+  const f = await lookupASN(ip);
+  return f ? f.asn : 0;
 }
 async function enrichHops(hops) {
   const need = hops.filter((h) => h.ip && !h.asn && !lib.isPrivateIP(h.ip) && !lib.prefixInfo(h.ip));
   const ips = [...new Set(need.map((h) => h.ip))].slice(0, 40);
   const found = {};
-  for (let i = 0; i < ips.length; i += 4) {
-    const part = ips.slice(i, i + 4);
-    const res = await Promise.all(part.map(lookupASN));
-    part.forEach((ip, k) => { if (res[k]) found[ip] = res[k]; });
-  }
+  const res = await Promise.all(ips.map(lookupASN));
+  ips.forEach((ip, k) => { if (res[k]) found[ip] = res[k]; });
   for (const h of need) {
     const f = found[h.ip];
     if (!f) continue;
@@ -193,19 +237,22 @@ async function buildNodeResult(client, cfg, output, exitCode, targets) {
     error: parsed.error ? { k: parsed.error.split(" ")[0] } : (exitCode !== 0 && !Object.keys(parsed.blocks).length ? { k: "exec", p: { code: exitCode, x: String(output || "").slice(0, 300) } } : ""),
     targets: [],
   };
+  const srcASNByVer = {};
   for (const t of targets) {
     const b = parsed.blocks[t.id];
     const v = t.v || (t.ip.includes(":") ? 6 : 4);
-    const noteErr = (note) => { const [k, ...rest] = String(note).split(" "); return k === "resolve" ? { k, p: { x: rest.join(" ") } } : { k }; };
+    const noteErr = (note) => { const [k, ...rest] = String(note).split(" "); return rest.length ? { k, p: { x: rest.join(" ") } } : { k }; };
     if (!b || b.note) { node.targets.push({ label: t.label, region: t.region || "", custom: t.custom || "", big: !!t.big, psize: t.psize || 0, port: t.port || 0, v, isp: t.isp, ip: t.ip, error: b ? noteErr(b.note) : { k: "noResult" }, segments: [], tags: [] }); continue; }
     await enrichHops(b.hops);
     const src = v === 6 ? client.ipv6 : client.ipv4;
-    const comp = lib.compressPath(b.hops, { maskMode: cfg.maskMode, maskFirstAS: cfg.maskFirstAS, srcIP: src });
+    if (srcASNByVer[v] === undefined) srcASNByVer[v] = await lookupSrcASN(src);
+    const srcASN = srcASNByVer[v];
+    const comp = lib.compressPath(b.hops, { maskMode: cfg.maskMode, maskFirstAS: cfg.maskFirstAS, srcIP: src, srcASN });
     // 網域目標以伺服器解析出的 IP 判斷是否到達
     const dstIP = b.ip && b.ip !== "-" ? b.ip : t.ip;
-    const cls = lib.classify(b.hops, t.isp, dstIP, { transitRtt: cfg.transitRtt });
+    const cls = lib.classify(b.hops, t.isp, dstIP, { transitRtt: cfg.transitRtt, srcASN });
     if (!cfg.showIPs) for (const s of comp.segments) s.ips = [];
-    const reached = b.hops.some((h) => h.ip === dstIP);
+    const reached = b.hops.some((h) => h.ip && lib.sameIP(h.ip, dstIP));
     node.targets.push({
       label: t.label,
       region: t.region || "",
@@ -301,37 +348,50 @@ async function runGroup(cfg, map, uuids, targets, opts) {
     const rounds = Math.ceil(targets.length / cfg.parallel);
     // 每跳送 3 個探測，每輪約 60 秒
     const deadline = Date.now() + Math.max(cfg.timeout, rounds * 60 + 30) * 1000;
-    while (pending.size && Date.now() < deadline) {
-      await sleep(5000);
-      let rows = [];
-      try { rows = (await server.call("admin:getTaskResultsByTaskId", { task_id: taskId })) || []; } catch (_) { continue; }
-      for (const r of rows) {
-        if (!pending.has(r.client) || !r.finished_at) continue;
-        pending.delete(r.client);
-        delete running[r.client];
-        const node = await buildNodeResult(map[r.client], cfg, r.result, r.exit_code, targets);
-        out[r.client] = node;
-        if (store) {
-          const prev = results[r.client];
-          results[r.client] = node;
-          saveStore();
-          if (opts.notifyChanges) telegram.notifyChange(prev, node).catch((e) => log("通知失敗", String(e)));
+    try {
+      while (pending.size && Date.now() < deadline) {
+        await sleep(5000);
+        let rows = [];
+        try { rows = (await server.call("admin:getTaskResultsByTaskId", { task_id: taskId })) || []; } catch (_) { continue; }
+        for (const r of rows) {
+          if (!pending.has(r.client) || !r.finished_at) continue;
+          pending.delete(r.client);
+          try {
+            const node = await buildNodeResult(map[r.client], cfg, r.result, r.exit_code, targets);
+            out[r.client] = node;
+            if (store) {
+              const prev = results[r.client];
+              results[r.client] = node;
+              saveStore();
+              if (opts.notifyChanges) telegram.notifyChange(prev, node).catch((e) => log("通知失敗", String(e)));
+            }
+            log("完成", map[r.client].name);
+          } catch (e) {
+            log("解析結果失敗", map[r.client].name, e.message || String(e));
+          } finally {
+            delete running[r.client];
+          }
         }
-        log("完成", map[r.client].name);
       }
-    }
-    for (const u of pending) {
-      delete running[u];
-      const err = { k: "timeout" };
-      out[u] = { uuid: u, name: map[u].name, targets: [], error: err, updated_at: new Date().toISOString() };
-      if (store) {
-        const prev = results[u] || { uuid: u, name: map[u].name, targets: [] };
-        prev.error = err;
-        prev.updated_at = new Date().toISOString();
-        results[u] = prev;
+      for (const u of pending) {
+        delete running[u];
+        const err = { k: "timeout" };
+        out[u] = { uuid: u, name: map[u].name, targets: [], error: err, updated_at: new Date().toISOString() };
+        if (store) {
+          const prev = results[u];
+          if (prev && prev.targets && prev.targets.length) {
+            // 保留舊結果與舊的 updated_at，避免誤以為舊路徑是剛剛測出來的
+            prev.error = err;
+            results[u] = prev;
+          } else {
+            results[u] = { uuid: u, name: map[u].name, targets: [], error: err, updated_at: "" };
+          }
+        }
       }
+      if (pending.size && store) saveStore();
+    } finally {
+      for (const u of pending) delete running[u];
     }
-    if (pending.size && store) saveStore();
     return out;
   })();
   return { done };
@@ -409,7 +469,8 @@ function load() {
       const u = req.query && req.query.uuid;
       const target = u ? want.filter((x) => x === (Array.isArray(u) ? u[0] : u)) : want;
       const r = await probe(target);
-      json(res, 200, { started: r.started, busy: r.busy, task_id: r.task_id, error: r.error });
+      r.done.catch((e) => log("檢測失敗", e.message || String(e)));
+      json(res, 200, { started: r.started, busy: r.busy, error: r.error });
     } catch (e) {
       json(res, 500, { error: e.message || String(e) });
     }
@@ -421,7 +482,8 @@ function load() {
       const cfg = await getCfg();
       if (Date.now() - lastAutoRun < cfg.interval * 60 * 1000) return;
       lastAutoRun = Date.now();
-      await probe(await selectedNodes(cfg), { notifyChanges: true });
+      const r = await probe(await selectedNodes(cfg), { notifyChanges: true });
+      r.done.catch((e) => log("排程檢測失敗", e.message || String(e)));
     } catch (e) {
       log("排程失敗", e.message || String(e));
     }
@@ -432,7 +494,8 @@ function load() {
     try {
       const cfg = await getCfg();
       lastAutoRun = Date.now();
-      await probe(await selectedNodes(cfg));
+      const r = await probe(await selectedNodes(cfg));
+      r.done.catch((e) => log("首次檢測結果失敗", e.message || String(e)));
     } catch (e) { log("首次檢測失敗", e.message || String(e)); }
   }, 30000);
 

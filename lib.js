@@ -18,15 +18,15 @@ for (const k of Object.keys(I18N.CN_AS)) AS_NAMES[k] = I18N.CN_AS[k][0];
 // 這些才用下面的備援表（取自 oneclickvirt/backtrace）。
 const PREFIX4_FALLBACK = [
   ["59.43.0.0", 16, 4809], // CN2 骨幹互連，未宣告
-  ["69.194.0.0", 16, 23764], // CTGNet，大部分未宣告
-  ["203.22.0.0", 16, 23764], // CTGNet，未宣告
-  ["202.77.0.0", 16, 10099], // CUG
-  ["43.252.0.0", 16, 10099], // CUG
-  ["61.14.0.0", 16, 10099], // CUG
+  ["69.194.160.0", 20, 23764], // CTGNet 骨幹互連，大部分未宣告（不可用整段 /16，以免誤蓋他網）
+  ["203.22.176.0", 22, 23764], // CTGNet 香港骨幹互連，未宣告
+  ["219.158.0.0", 17, 4837], // 聯通 169 骨幹互連，部分 /24 未宣告（128.0/17 屬 AS4808 會先命中 prefix4.js）
 ];
 function v4(ip) {
-  const p = String(ip).split(".").map(Number);
-  return p.length === 4 && p.every((x) => Number.isInteger(x) && x >= 0 && x <= 255) ? p : null;
+  const s = String(ip);
+  if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(s)) return null;
+  const p = s.split(".").map(Number);
+  return p.every((x) => x >= 0 && x <= 255) ? p : null;
 }
 function v4int(p) {
   return ((p[0] << 24) >>> 0) + (p[1] << 16) + (p[2] << 8) + p[3];
@@ -55,13 +55,19 @@ const BB_BY_ASN = { 4809: "cn2", 23764: "ctg", 58807: "cmin2", 58453: "cmi", 100
 function expand6(ip) {
   ip = String(ip).toLowerCase().split("%")[0];
   if (!ip.includes(":")) return null;
-  let [a, b] = ip.split("::");
-  const ha = a ? a.split(":") : [];
-  const hb = b !== undefined && b ? b.split(":") : [];
-  const fill = b !== undefined ? 8 - ha.length - hb.length : 0;
-  const all = ha.concat(Array(Math.max(0, fill)).fill("0"), hb);
-  if (all.length !== 8) return null;
+  const parts = ip.split("::");
+  if (parts.length > 2) return null;
+  const ha = parts[0] ? parts[0].split(":") : [];
+  const hb = parts.length === 2 && parts[1] ? parts[1].split(":") : [];
+  const fill = parts.length === 2 ? 8 - ha.length - hb.length : 0;
+  if (parts.length === 2 && fill < 1) return null;
+  const all = ha.concat(Array(fill).fill("0"), hb);
+  if (all.length !== 8 || !all.every((x) => /^[0-9a-f]{1,4}$/.test(x))) return null;
   return all.map((x) => x.padStart(4, "0"));
+}
+function isIP(s) {
+  s = String(s || "");
+  return s.includes(":") ? expand6(s) !== null : v4(s) !== null;
 }
 
 // 回傳 { asn, bb }；bb 是骨幹種類（只有確定是骨幹網段時才有）
@@ -166,11 +172,12 @@ function isPrivateIP(ip) {
 function maskIP(ip, mode) {
   if (!ip) return "";
   mode = mode || "half";
-  if (mode === "full") return "*.*.*.*";
+  if (mode === "full") return ip.includes(":") ? "****:****:****:****" : "*.*.*.*";
   if (ip.includes(":")) {
-    const parts = ip.split(":").filter((x) => x !== "");
+    const h = expand6(ip);
+    if (!h) return "****:****";
     const keep = mode === "one" ? 1 : 2;
-    return parts.slice(0, keep).join(":") + ":****:****";
+    return h.slice(0, keep).map((x) => x.replace(/^0+/, "") || "0").join(":") + ":****:****";
   }
   const p = ip.split(".");
   if (p.length !== 4) return "***";
@@ -259,9 +266,10 @@ function parseMtrJSON(text) {
 
 function parseMtrText(text) {
   // "  5. AS4134   202.97.1.1   0.0%  2  10.1  10.2 ..."
+  // "  2.|-- ???                 100.0  3   0.0   0.0 ..."（100% 丟包行無 % 符號）
   const hops = [];
   for (const line of text.split("\n")) {
-    const m = line.match(/^\s*(\d+)\.(?:\|--)?\s+(AS\S+)?\s*(\S+)\s+([\d.]+)%\s+\d+\s+([\d.]+)?\s*([\d.]+)?/);
+    const m = line.match(/^\s*(\d+)\.\s*(?:\|--)?\s+(AS\S+)?\s*(\S+)\s+([\d.]+)%?\s+\d+\s+([\d.]+)?\s*([\d.]+)?/);
     if (!m) continue;
     const ok = m[3] && m[3] !== "???";
     hops.push({ ttl: Number(m[1]), ip: ok ? m[3] : "", asn: normASN(m[2]), owner: "", rtt: ok ? num(m[6]) : null, geo: "" });
@@ -343,22 +351,56 @@ function ip16(ip) {
   return s.includes(":") ? s.toLowerCase().split(":").slice(0, 2).join(":") : s.split(".").slice(0, 2).join(".");
 }
 
+// 純國際骨幹 / 區域轉接業者（不含雲端機房）：當本機機房第一跳是內網或逾時而漏掉時，
+// 避免把這些業者誤當成本機機房 AS 丟棄或遮罩。
+const TRANSIT_ONLY_AS = new Set([
+  174, 209, 701, 702, 1239, 1273, 1299, 2497, 2516, 2828, 2914, 3257, 3320, 3356, 3491,
+  3549, 3786, 4635, 4637, 4713, 4755, 4760, 4766, 5511, 6453, 6461, 6762, 6939, 7018,
+  7473, 9002, 9304, 9318, 9498, 10026, 12956, 17676,
+]);
+function isOwnFirstAS(asn, firstPubIdx, opts) {
+  if (!asn) return false;
+  const srcASN = Number(opts && opts.srcASN) || 0;
+  if (srcASN) {
+    if (asn === srcASN) return true;
+    if (firstPubIdx > 0 || TRANSIT_ONLY_AS.has(asn)) return false;
+    return true;
+  }
+  if (firstPubIdx > 0 && TRANSIT_ONLY_AS.has(asn)) return false;
+  return true;
+}
+
 // ---- 位置校正 ----
 // nexttrace 標的位置有時是「註冊地」而非實際位置（例如香港註冊、實際在東京的 akari.hk 會標成「中国 香港」）。
 // 光在光纖中每 1 ms 來回最多約 100 km，延遲和伺服器最近的跳點只差幾 ms 的跳點，一定和伺服器在同一個城市。
-// 取這些近距離跳點多數標示的國家當作伺服器所在地，標成其他國家的改正，原本的標示留在 geo_orig。
+// 取這些近距離跳點多數不同網路（AS）標示的國家當作伺服器所在地，標成其他國家的改正，原本的標示留在 geo_orig。
 const NEAR_MS = 5;
-function geoCountry(g) { return String(g || "").trim().split(/\s+/)[0] || ""; }
+const MULTI_WORD_COUNTRIES = /^(united states|united kingdom|hong kong|south korea|north korea|new zealand|south africa|czech republic|saudi arabia|united arab emirates|costa rica|puerto rico|sri lanka)/i;
+function geoCountry(g) {
+  const s = String(g || "").trim();
+  if (!s) return "";
+  if (/^(中国|中國)\s+(台湾|台灣)/.test(s)) return "台湾";
+  const mw = s.match(MULTI_WORD_COUNTRIES);
+  if (mw) return mw[1].toLowerCase();
+  return s.split(/\s+/)[0] || "";
+}
 function fixGeo(hops) {
   if (!Array.isArray(hops) || hops.some((h) => h && h.geo_orig !== undefined)) return hops;
   const pubRtt = hops.filter((h) => h && h.ip && !isPrivateIP(h.ip) && typeof h.rtt === "number").map((h) => h.rtt);
   if (!pubRtt.length) return hops;
   const base = Math.min(...pubRtt);
   const near = hops.filter((h) => h && h.ip && !isPrivateIP(h.ip) && h.geo && typeof h.rtt === "number" && h.rtt - base <= NEAR_MS);
-  const count = {};
-  for (const h of near) { const c = geoCountry(h.geo); count[c] = (count[c] || 0) + 1; }
-  const ranked = Object.entries(count).sort((a, b) => b[1] - a[1]);
-  // 至少兩跳一致、而且比其他國家多，才算確定
+  // 依不同網路（AS 或 /16）計票，避免單一機房連續多跳標錯註冊地就反過來蓋掉正確的上游業者位置
+  const netsByCountry = {};
+  for (const h of near) {
+    const c = geoCountry(h.geo);
+    if (!c) continue;
+    const asn = guessASN(h.ip) || h.asn;
+    const netId = asn ? "AS" + asn : ip16(h.ip);
+    (netsByCountry[c] = netsByCountry[c] || new Set()).add(netId);
+  }
+  const ranked = Object.entries(netsByCountry).map(([c, s]) => [c, s.size]).sort((a, b) => b[1] - a[1]);
+  // 至少兩個不同網路一致、而且比其他國家多，才算確定
   if (!ranked.length || ranked[0][1] < 2 || (ranked[1] && ranked[1][1] >= ranked[0][1])) return hops;
   const home = ranked[0][0];
   const full = {};
@@ -376,12 +418,15 @@ function compressPath(hops, opts) {
   hops = fixGeo(hops);
   const segs = [];
   let lastRtt = null;
-  for (const h of hops) {
+  let firstPubIdx = -1;
+  for (let hi = 0; hi < hops.length; hi++) {
+    const h = hops[hi];
     if (!h.ip) {
       if (segs.length) segs[segs.length - 1].timeouts++;
       continue;
     }
     const priv = isPrivateIP(h.ip);
+    if (!priv && firstPubIdx < 0) firstPubIdx = hi;
     let asn = priv ? 0 : guessASN(h.ip) || h.asn;
     const key = priv ? "LAN" : asn ? "AS" + asn : "?";
     let seg = segs[segs.length - 1];
@@ -405,9 +450,10 @@ function compressPath(hops, opts) {
       segs.push(seg);
     }
     const firstPublicSeg = segs.find((s) => s.key !== "LAN");
+    const shouldMaskFirst = maskFirstAS && firstPublicSeg && (!firstPublicSeg.asn || isOwnFirstAS(firstPublicSeg.asn, firstPubIdx, opts));
     let shownIP = h.ip;
     if (priv) shownIP = "LAN";
-    else if (h.ip === opts.srcIP || (maskFirstAS && seg === firstPublicSeg)) shownIP = maskIP(h.ip, maskMode);
+    else if ((opts.srcIP && sameIP(h.ip, opts.srcIP)) || (shouldMaskFirst && seg === firstPublicSeg)) shownIP = maskIP(h.ip, maskMode);
     seg.hops++;
     if (!priv) seg.last_ip = h.ip;
     if (shownIP && !seg.ips.includes(shownIP) && seg.ips.length < 6) seg.ips.push(shownIP);
@@ -420,10 +466,10 @@ function compressPath(hops, opts) {
       lastRtt = h.rtt;
     }
   }
-  // 第一公網段的地理位置也會暴露本機，一併隱藏
+  // 第一公網段為本機機房時，地理位置也會暴露本機，一併隱藏
   if (maskFirstAS) {
     const s = segs.find((x) => x.key !== "LAN");
-    if (s) { s.geo = ""; s.geo_in = ""; s.geo_orig = ""; }
+    if (s && (!s.asn || isOwnFirstAS(s.asn, firstPubIdx, opts))) { s.geo = ""; s.geo_in = ""; s.geo_orig = ""; }
   }
   for (const s of segs) delete s.last_ip;
   return { segments: segs, last_rtt: lastRtt };
@@ -471,14 +517,17 @@ function classify(hops, isp, dst, opts) {
   const before = pub.slice(0, entry < 0 ? pub.length : entry);
   const runs = [];
   for (const h of before) {
+    if (!h.asn) continue;
     const last = runs[runs.length - 1];
-    if (last && (last.asn === h.asn || !h.asn)) continue;
-    runs.push({ asn: h.asn, owner: h.owner });
+    if (last && last.asn === h.asn) continue;
+    runs.push({ asn: h.asn, owner: h.owner, idx: h.idx });
   }
-  res.intl = runs.slice(1).filter((r) => r.asn).map((r) => ({ asn: r.asn, name: I18N.INTL_AS[r.asn] || r.owner || "" }));
+  const firstIsOwn = runs.length > 0 && isOwnFirstAS(runs[0].asn, runs[0].idx, opts);
+  res.intl = (firstIsOwn ? runs.slice(1) : runs).map((r) => ({ asn: r.asn, name: I18N.INTL_AS[r.asn] || r.owner || "" }));
   // 入境前有跳點查不到 AS（nexttrace 的資料 API 失敗、RIPEstat 也查不到）：看不出經過哪些國際業者，不能當成直連
-  res.intl_unknown = before.some((h, k) => k > 0 && h.failed);
-  res.intl_note = { kind: res.intl_unknown && !res.intl.length ? "unknown" : res.intl.length ? "transit" : entry === 0 ? "inside" : "direct", ms: null, long: false, overseas: false };
+  res.intl_unknown = before.some((h, k) => (k > 0 || h.idx > 0) && h.failed);
+  const srcInside = entry === 0 && (opts.srcASN ? !!familyOf(Number(opts.srcASN)) : pub[0].idx === 0);
+  res.intl_note = { kind: res.intl_unknown && !res.intl.length ? "unknown" : res.intl.length ? "transit" : srcInside ? "inside" : "direct", ms: null, long: false, overseas: false };
 
   // 交接延遲：機房第一跳 → 第一個三網跳點之間增加的延遲。
   // 路由器回應 ICMP 常被降低優先而虛高，所以每一跳取「這跳以及之後所有跳點的最低延遲」。
@@ -488,6 +537,9 @@ function classify(hops, isp, dst, opts) {
     if (pub[i].rtt !== null && (low === null || pub[i].rtt < low)) low = pub[i].rtt;
     eff[i] = low;
   }
+  let lastEff = null;
+  for (let i = eff.length - 1; i >= 0; i--) { if (eff[i] !== null) { lastEff = eff[i]; break; } }
+  const farFromChina = eff[0] !== null && lastEff !== null && lastEff - eff[0] >= transitRtt;
   res.handoff_delta = entry > 0 && eff[0] !== null && eff[entry] !== null ? Math.round((eff[entry] - eff[0]) * 10) / 10 : null;
   // 交接前延遲沒增加多少（例如 NTT 在美國當地就交給電信）→ 國際業者只是機房旁的一小段，不寫進標籤
   // 國際業者承載了多遠：看它自己最後一跳的延遲（不是第一個三網跳點，
@@ -500,14 +552,23 @@ function classify(hops, isp, dst, opts) {
   res.transit_delta = lastIntlIdx >= 0 && eff[0] !== null && eff[lastIntlIdx] !== null ? Math.round((eff[lastIntlIdx] - eff[0]) * 10) / 10 : null;
   const carried = res.transit_delta !== null ? res.transit_delta : res.handoff_delta;
   res.transit_shown = res.intl.length > 0 && (carried === null || carried >= transitRtt);
-  const inChina = (g) => /中国|中國|香港|澳门|澳門|China|Hong ?Kong|Macau/i.test(g || "");
+  const inChina = (g) => !/台湾|台灣|Taiwan/i.test(g || "") && /中国|中國|香港|澳门|澳門|China|Hong ?Kong|Macau/i.test(g || "");
   if (entry >= 0) {
+    let seenCn2 = false;
     for (let k = entry; k < pub.length; k++) {
       const h = pub[k];
       if (!h.fam || h.dst) break;
-      const foreign = h.geo ? !inChina(h.geo) : eff[k] !== null && eff[0] !== null && eff[k] - eff[0] < transitRtt;
+      if (h.asn === 4809) seenCn2 = true;
+      // 有地理位置時以位置為準；無地理位置時（mtr / traceroute）須同時滿足距離機房 < transitRtt
+      // 且後續仍有顯著跨海延遲，才視為海外節點，避免香港等鄰近機房把國內省網跳點誤判成海外 163 骨幹
+      const foreign = h.geo
+        ? !inChina(h.geo)
+        : farFromChina && eff[k] !== null && eff[0] !== null && lastEff !== null &&
+          eff[k] - eff[0] < transitRtt && lastEff - eff[k] >= HANDOFF_JUMP_MS;
       if (!foreign) break;
-      if (!h.bb) h.bb = { 4134: "163", 4837: "169", 9808: "cmnet" }[h.asn] || "";
+      if (!h.bb && !(seenCn2 && h.asn === 4134 && !h.geo)) {
+        h.bb = { 4134: "163", 4837: "169", 9808: "cmnet" }[h.asn] || "";
+      }
       h.overseas = true;
     }
   }
@@ -672,21 +733,23 @@ function classify(hops, isp, dst, opts) {
   const lastBB = {};
   tail.forEach((h, k) => { if (h.fam && isBackbone(h)) lastBB[h.fam] = k; });
   const items = [];
+  let seenOtherFam = false;
   for (let k = 0; k < tail.length; k++) {
     const h = tail[k];
     let name = netName(h);
     if (!name) continue;
+    if (h.fam !== F) seenOtherFam = true;
     // 骨幹之前的 AS4134 / AS4837 / AS9808 也是骨幹（例如海外節點），之後的才是交給省網
     if ((/^prov:/.test(name) || /^(4134|4837)$/.test(name)) && lastBB[h.fam] !== undefined && k < lastBB[h.fam]) {
       name = { 4134: "4134(163)", 4837: "4837(169)", 9808: "9808" }[h.asn] || name;
     }
-    if (/^CN2/.test(res.short) && h.fam === "ct" && !/^prov:/.test(name)) name = res.short; // 只寫 CN2 GIA / CN2 GT
+    if (/^CN2/.test(res.short) && !seenOtherFam && h.fam === "ct" && !/^prov:/.test(name)) name = res.short; // 只寫 CN2 GIA / CN2 GT
     const prev = items[items.length - 1];
     if (prev && prev.name === name) continue;
     items.push({ fam: h.fam, name });
   }
-  // 同一家的骨幹之後交給自家省網是正常的收尾，不寫出來
-  const isEndNet = (n) => /^prov:/.test(n) || /^(4134|4837|9808)$/.test(n);
+  // 同一家的骨幹之後交給自家省網是正常的收尾，不寫出來（9808 屬 CMNET 骨幹，保留在完整走法 chain_full，僅於第一行省略）
+  const isEndNet = (n) => /^prov:/.test(n) || /^(4134|4837)$/.test(n);
   while (items.length > 1 && isEndNet(items[items.length - 1].name) && items[items.length - 2].fam === items[items.length - 1].fam &&
     !/^prov:/.test(items[items.length - 2].name)) items.pop();
   const netsFull = items.map((it) => it.name);
@@ -708,7 +771,7 @@ function classify(hops, isp, dst, opts) {
   res.handoff_jump = jump;
   if (!last) res.connect = res.intl_unknown ? "unknown" : "direct";
   else if (res.transit_shown) { res.connect = "long_haul"; showTransit = true; }
-  else if (!res.handoff_overseas && res.handoff_geo_known) { res.connect = "local_transit"; showTransit = true; }
+  else if (!res.handoff_overseas && (res.handoff_geo_known || !farFromChina)) { res.connect = "local_transit"; showTransit = true; }
   else {
     res.connect = "overseas_transit";
     // 三網第一跳有位置時以位置為準（例如 CMI 223.120.2.x 標東京，即使它回應 ICMP 較慢、延遲看起來大跳，
@@ -786,15 +849,18 @@ function parseTargets(text, ver) {
   String(text || "").split("\n").forEach((line, i) => {
     line = line.trim();
     if (!line || line.startsWith("#")) return;
-    const f = line.split(/[,，\s]+/).filter(Boolean);
+    // 有逗號時按逗號切（允許名稱內含空白，例如 "Beijing Telecom,219.141.140.10,ct"）；沒逗號時才按空白切
+    const f = (/[,，]/.test(line) ? line.split(/[,，]+/) : line.split(/\s+/)).map((x) => x.trim()).filter(Boolean);
     if (f.length < 2) return;
     const ip = f[1];
-    const isIP = /^[0-9a-fA-F:.]+$/.test(ip) && /[.:]/.test(ip) && !/[g-z]/i.test(ip);
-    if (!isIP && !/^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$/.test(ip)) return;
-    // 網域看名稱裡的 v6 / ipv6 字樣判斷版本，否則視為 IPv4
-    const v = isIP ? (ip.includes(":") ? 6 : 4) : /(^|[.-])(v6|ipv6)([.-]|$)/i.test(ip) ? 6 : 4;
-    const port = /^\d{1,5}$/.test(f[3] || "") ? Number(f[3]) : 80;
+    const ipLiteral = isIP(ip);
+    const isDomain = !ipLiteral && /^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$/.test(ip) && /[A-Za-z]/.test(ip);
+    if (!ipLiteral && !isDomain) return;
+    // IP 依位址格式決定版本；網域在已指定清單版本（ver=4/6）時依清單版本，未指定才看 v6 / ipv6 字樣
+    const v = ipLiteral ? (ip.includes(":") ? 6 : 4) : (ver || (/(^|[.-])(v6|ipv6)([.-]|$)/i.test(ip) ? 6 : 4));
     if (ver && v !== ver) return;
+    const rawPort = /^\d{1,5}$/.test(f[3] || "") ? Number(f[3]) : 80;
+    const port = rawPort >= 1 && rawPort <= 65535 ? rawPort : 80;
     const isp = (f[2] || "").toLowerCase();
     out.push({ id: pfx + i, v, label: f[0], ip, port, isp: ["ct", "cu", "cm"].includes(isp) ? isp : guessIsp(f[0]) });
   });
@@ -808,4 +874,4 @@ function guessIsp(label) {
   return "";
 }
 
-module.exports = { fixGeo, I18N, ZSTATIC_PROVINCES, zstaticTargets, AS_NAMES, FAMILY_NAME, prefixInfo, familyOf, isPrivateIP, maskIP, parseOutput, parseBlock, compressPath, classify, parseTargets };
+module.exports = { fixGeo, I18N, ZSTATIC_PROVINCES, zstaticTargets, AS_NAMES, FAMILY_NAME, prefixInfo, familyOf, isIP, sameIP, isPrivateIP, maskIP, parseOutput, parseBlock, compressPath, classify, parseTargets };

@@ -147,7 +147,8 @@ function fmtTarget(L, node, t) {
 function nodeButtons(L, node) {
   const rows = [];
   let row = [];
-  (node.targets || []).forEach((t, i) => {
+  // Telegram 單則訊息 inline_keyboard 上限為 100 顆按鈕，保留 1 顆給底部的「立即檢測」
+  (node.targets || []).slice(0, 99).forEach((t, i) => {
     row.push({ text: `${ISP_ICON[t.isp] || "⚪️"} ${targetName(L, t)}${t.v === 6 ? " v6" : ""}${t.big ? " " + I18N.t(L, "big.short") : ""}`, callback_data: `d:${node.uuid}:${i}` });
     if (row.length === 3) { rows.push(row); row = []; }
   });
@@ -229,7 +230,7 @@ async function cmdTrace(cfg, L, chatId, args) {
   // 自訂 IP
   if (ip) {
     if (!cfg.tgAllowCustom) return send(cfg, chatId, I18N.t(L, "tg.customOff"));
-    if (!/^(\d{1,3}(\.\d{1,3}){3}|[0-9a-fA-F:]+:[0-9a-fA-F:]*)$/.test(ip)) return send(cfg, chatId, I18N.t(L, "tg.badIp"));
+    if (!deps.lib.isIP(ip)) return send(cfg, chatId, I18N.t(L, "tg.badIp"));
     const c = await resolveOrHint(cfg, L, chatId, q, "");
     if (!c) return;
     const target = { id: "c0", v: ip.includes(":") ? 6 : 4, label: ip, custom: ip, ip, port: 80, proto: "icmp", isp: "" };
@@ -315,9 +316,9 @@ async function handleMessage(cfg, msg) {
     case "list": return cmdList(cfg, L, chatId);
     case "route": return cmdRoute(cfg, L, chatId, args.join(" "));
     case "trace": {
-      // 最後一個參數像 IP 時視為自訂目標，其餘是伺服器名稱（名稱可含空白）
+      // 最後一個參數像 IP（有效 IPv4 / IPv6，或四段數字 / 含冒號）時視為自訂目標，其餘是伺服器名稱（名稱可含空白）
       const last = args[args.length - 1] || "";
-      const isIP = args.length >= 2 && /^[0-9a-fA-F.:]+$/.test(last) && /[.:]/.test(last);
+      const isIP = args.length >= 2 && (deps.lib.isIP(last) || /^\d+\.\d+\.\d+\.\d+$/.test(last) || (/^[0-9a-fA-F:]+$/.test(last) && last.includes(":")));
       return cmdTrace(cfg, L, chatId, isIP ? [args.slice(0, -1).join(" "), last] : [args.join(" ")]);
     }
     case "status": return cmdStatus(cfg, L, chatId);
@@ -433,7 +434,7 @@ const NET_FAMILY = { CTGNet: "ct", "CN2 GIA": "ct", "CN2 GT": "ct", CN2: "ct", "
 function routeSummary(t) {
   const r = t.route;
   if (!r || !r.chip) return null; // 舊格式的結果不比較，避免插件更新後誤報
-  if (r.connect === "unknown" || r.intl_unknown) return null; // AS 查詢失敗的那次不比較，避免誤報
+  if (r.connect === "unknown" || r.connect === "none" || r.intl_unknown) return null; // AS 查詢失敗或未入三網的那次不比較，避免誤報
   // 第一行開頭是交接業者時先去掉（交接業者另外比較）
   const withTransit = !!r.handover && (r.chain || [])[0] === r.handover;
   const nets = (r.chain || []).slice(withTransit ? 1 : 0);
@@ -457,13 +458,22 @@ function routeSummary(t) {
 function describeChange(L, a, b) {
   const parts = [];
   const cls = (c) => (c ? (c.generic ? I18N.t(L, "tg.generic." + c.fam) : c.name) : "—");
-  const fams = (x) => x.classes.map((c) => I18N.t(L, "carrier." + c.fam) || c.fam).join("→");
-  const conn = (c) => (c === "overseas_transit" ? I18N.t(L, "tg.connect.overseas") : I18N.access(L, { connect: c }));
+  const fams = (x) => {
+    const out = [];
+    for (const c of x.classes) {
+      const f = I18N.t(L, "carrier." + c.fam) || c.fam;
+      if (out[out.length - 1] !== f) out.push(f);
+    }
+    return out.join("→");
+  };
+  const nets = (x) => x.classes.map(cls).join(" → ") || "—";
+  const conn = (c) => (c === "overseas_transit" ? I18N.t(L, "tg.connect.overseas") : I18N.access(L, { connect: c }) || c || "—");
   if (a.transit !== b.transit) parts.push(I18N.t(L, "tg.chgTransit", { a: a.transit || I18N.t(L, "tg.noTransit"), b: b.transit || I18N.t(L, "tg.noTransit") }));
   if (a.connect !== b.connect) parts.push(I18N.t(L, "tg.chgConnect", { a: conn(a.connect), b: conn(b.connect) }));
   const ea = cls(a.classes[0]), eb = cls(b.classes[0]);
   if (ea !== eb) parts.push(I18N.t(L, "tg.chgEntry", { a: ea, b: eb }));
   else if (fams(a) !== fams(b)) parts.push(I18N.t(L, "tg.chgCarriers", { a: fams(a), b: fams(b) }));
+  else if (nets(a) !== nets(b)) parts.push(I18N.t(L, "tg.chgRoute", { a: nets(a), b: nets(b) }));
   return parts;
 }
 
