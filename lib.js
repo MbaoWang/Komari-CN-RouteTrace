@@ -744,6 +744,7 @@ function classify(hops, isp, dst, opts) {
   const isBackbone = (h) => [4809, 23764, 58807, 58453, 10099, 9929].includes(h.asn) || ["163", "169", "cmnet"].includes(h.bb);
   const lastBB = {};
   tail.forEach((h, k) => { if (h.fam && isBackbone(h)) lastBB[h.fam] = k; });
+  const isEndNet = (n) => /^prov:/.test(n) || /^(4134|4837)$/.test(n);
   const items = [];
   let seenOtherFam = false;
   for (let k = 0; k < tail.length; k++) {
@@ -757,24 +758,18 @@ function classify(hops, isp, dst, opts) {
     }
     if (/^CN2/.test(res.short) && !seenOtherFam && h.fam === "ct" && !/^prov:/.test(name)) name = res.short; // 只寫 CN2 GIA / CN2 GT
     const prev = items[items.length - 1];
-    if (prev && prev.name === name) continue;
+    // 同一家的骨幹之後緊接自家省網或一般 4134 / 4837（無論在結尾或跨網前）直接併入前一段；9808 屬 CMNET 骨幹，保留在完整走法 chain_full
+    if (prev && (prev.name === name || (prev.fam === h.fam && isEndNet(name) && !/^prov:/.test(prev.name)))) continue;
     items.push({ fam: h.fam, name });
   }
-  // 同一家的骨幹之後交給自家省網是正常的收尾，不寫出來（9808 屬 CMNET 骨幹，保留在完整走法 chain_full，僅於第一行省略）
-  const isEndNet = (n) => /^prov:/.test(n) || /^(4134|4837)$/.test(n);
-  while (items.length > 1 && isEndNet(items[items.length - 1].name) && items[items.length - 2].fam === items[items.length - 1].fam &&
-    !/^prov:/.test(items[items.length - 2].name)) items.pop();
   const netsFull = items.map((it) => it.name);
   // 第一行：移動的國際網（CMI / CMIN2）入境後一定接 9808，目標也是移動時省略最後的 9808
   const nets = netsFull.slice();
   if (nets.length >= 2 && nets[nets.length - 1] === "9808" && /^CMI/.test(nets[nets.length - 2])) nets.pop();
 
-  // 交接寫法：
-  //   直連：機房直接接三網                                 → 只寫網路，例如「CN2 GIA」「CTGNet → 4134(163)」
-  //   海外交接：延遲明確證實國際業者在機房旁就交給三網（< 20 ms 且交接無大跳），
-  //             後面由三網自己的骨幹跨海回國（>= 20 ms）    → 只寫網路「4134(163)」「CMI」，業者寫在小字
-  //   其餘走國際業者（含長途、近岸跨海或看不到三網海外段） → 一律寫「業者 → 三網 · 轉接」，不受 GeoIP 漂移影響
-  let showTransit = false;
+  // 交接寫法（極簡兩態，不受 GeoIP 漂移或單跳丟包影響）：
+  //   直連：機房直接接三網     → 只寫網路，例如「CN2 GIA」「CTGNet → 4134(163)」
+  //   國際轉接：經過國際業者   → 一律寫「業者 → 三網 · 國際轉接」，例如「SoftBank → CMI」「Lumen → CMI」
   const entryHop = entry >= 0 ? pub[entry] : null;
   const jump = lastIntlIdx >= 0 && entryHop && eff[lastIntlIdx] !== null && eff[entry] !== null ? Math.round((eff[entry] - eff[lastIntlIdx]) * 10) / 10 : null;
   res.handoff_jump = jump;
@@ -794,22 +789,15 @@ function classify(hops, isp, dst, opts) {
   }
   if (!last) {
     res.connect = res.intl_unknown ? "unknown" : "direct";
-  } else if (ownLeg) {
-    res.connect = "overseas_transit";
-    showTransit = false;
-    if (nets.length && !/^(prov|mix):/.test(nets[0])) {
+  } else {
+    res.connect = "transit";
+    if (ownLeg && nets.length && !/^(prov|mix):/.test(nets[0])) {
       const overseasGeo = entryHop.geo && !inChina(entryHop.geo) ? entryHop.geo : "";
       res.ev.push(E(overseasGeo ? "ev.ownLeg" : "ev.ownLegNoGeo", { x: res.handover, n: nets[0], g: overseasGeo }));
     }
-  } else {
-    res.connect = "transit";
-    showTransit = true;
-    if (serverAbroad && carried !== null && carried < handoffLimit && jump !== null && jump >= HANDOFF_JUMP_MS) {
-      res.ev.push(E("ev.gap.jump", { x: res.handover, ms: jump }));
-    }
   }
 
-  res.chain = (showTransit ? [res.handover] : []).concat(nets);
+  res.chain = (last ? [res.handover] : []).concat(nets);
   // 完整走法：所有國際業者 + 經過的網路
   res.chain_full = res.intl.map((r) => shortName(r.asn, r.name)).concat(netsFull);
 
