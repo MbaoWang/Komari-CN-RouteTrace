@@ -27,7 +27,7 @@
       "carrier.ct": "電信", "carrier.cu": "聯通", "carrier.cm": "移動",
       "prov.ct": "電信省網", "prov.cu": "聯通省網", "prov.cm": "移動省網",
       "mix": "{x} 混合",
-      "access.direct": "直連", "access.long": "長途承載", "access.local": "當地交接", "access.overseas": "經 {x} 海外交接", "access.overseasShort": "海外交接", "access.unknown": "國際段 AS 查詢失敗",
+      "access.direct": "直連", "access.transit": "轉接", "access.long": "長途承載", "access.local": "當地交接", "access.overseas": "經 {x} 海外交接", "access.overseasShort": "海外交接", "access.unknown": "國際段 AS 查詢失敗",
       "conf.inferred": "推測", "conf.insufficient": "證據不足", "unreached": "未到達",
       "none.short": "未入三網",
       "ev.none.noCarrier": "路徑上沒有出現電信 / 聯通 / 移動的 AS",
@@ -63,6 +63,7 @@
       "ev.sep": "；", "list.sep": "、",
       "intl.inside": "機房直接位於三網", "intl.direct": "機房直連三網",
       "intl.long": "；國際業者承載延遲 {ms} ms（長途承載）",
+      "intl.carried": "；國際業者承載 {ms} ms（非直連）",
       "intl.shortOverseas": "；國際業者只承載 {ms} ms（在海外就交給三網，非直連）",
       "intl.shortLocal": "；國際業者只承載 {ms} ms（在當地就交給三網，非直連）",
       "seg.lan": "內網 / 本機閘道", "seg.lanIp": "內網", "seg.unknown": "未知 AS", "seg.local": "中國{x} 當地網", "seg.geoFixed": "依延遲修正，nexttrace 標示為 {x}",
@@ -103,7 +104,7 @@
       "carrier.ct": "电信", "carrier.cu": "联通", "carrier.cm": "移动",
       "prov.ct": "电信省网", "prov.cu": "联通省网", "prov.cm": "移动省网",
       "mix": "{x} 混合",
-      "access.direct": "直连", "access.long": "长途承载", "access.local": "当地交接", "access.overseas": "经 {x} 海外交接", "access.overseasShort": "海外交接", "access.unknown": "国际段 AS 查询失败",
+      "access.direct": "直连", "access.transit": "转接", "access.long": "长途承载", "access.local": "当地交接", "access.overseas": "经 {x} 海外交接", "access.overseasShort": "海外交接", "access.unknown": "国际段 AS 查询失败",
       "conf.inferred": "推测", "conf.insufficient": "证据不足", "unreached": "未到达",
       "none.short": "未入三网",
       "ev.none.noCarrier": "路径上没有出现电信 / 联通 / 移动的 AS",
@@ -139,6 +140,7 @@
       "ev.sep": "；", "list.sep": "、",
       "intl.inside": "机房直接位于三网", "intl.direct": "机房直连三网",
       "intl.long": "；国际运营商承载延迟 {ms} ms（长途承载）",
+      "intl.carried": "；国际运营商承载 {ms} ms（非直连）",
       "intl.shortOverseas": "；国际运营商只承载 {ms} ms（在海外就交给三网，非直连）",
       "intl.shortLocal": "；国际运营商只承载 {ms} ms（在当地就交给三网，非直连）",
       "seg.lan": "内网 / 本机网关", "seg.lanIp": "内网", "seg.unknown": "未知 AS", "seg.local": "中国{x} 当地网", "seg.geoFixed": "依延迟修正，nexttrace 标示为 {x}",
@@ -179,7 +181,7 @@
       "carrier.ct": "Telecom", "carrier.cu": "Unicom", "carrier.cm": "Mobile",
       "prov.ct": "Telecom provincial", "prov.cu": "Unicom provincial", "prov.cm": "Mobile provincial",
       "mix": "{x} mixed",
-      "access.direct": "Direct", "access.long": "Long-haul transit", "access.local": "Local handoff", "access.overseas": "Via {x}, handed off abroad", "access.overseasShort": "Handed off abroad", "access.unknown": "Transit AS lookup failed",
+      "access.direct": "Direct", "access.transit": "Transit", "access.long": "Long-haul transit", "access.local": "Local handoff", "access.overseas": "Via {x}, handed off abroad", "access.overseasShort": "Handed off abroad", "access.unknown": "Transit AS lookup failed",
       "conf.inferred": "Inferred", "conf.insufficient": "Insufficient evidence", "unreached": "Not reached",
       "none.short": "Not in China networks",
       "ev.none.noCarrier": "No China Telecom / Unicom / Mobile AS on the path",
@@ -215,6 +217,7 @@
       "ev.sep": "; ", "list.sep": ", ",
       "intl.inside": "Server is inside a China carrier network", "intl.direct": "Server connects directly to China carriers",
       "intl.long": "; transit carried {ms} ms (long-haul)",
+      "intl.carried": "; transit carried {ms} ms (not direct)",
       "intl.shortOverseas": "; transit carried only {ms} ms (handed to China carriers abroad, not direct)",
       "intl.shortLocal": "; transit carried only {ms} ms (handed to China carriers locally, not direct)",
       "seg.lan": "LAN / local gateway", "seg.lanIp": "LAN", "seg.unknown": "Unknown AS", "seg.local": "China {x} local network", "seg.geoFixed": "corrected by latency; nexttrace said {x}",
@@ -255,7 +258,7 @@
       "carrier.ct": "電信", "carrier.cu": "聯通", "carrier.cm": "移動",
       "prov.ct": "電信 省内網", "prov.cu": "聯通 省内網", "prov.cm": "移動 省内網",
       "mix": "{x} 混在",
-      "access.direct": "直結", "access.long": "長距離中継", "access.local": "現地で引き渡し", "access.overseas": "{x} 経由・海外で引き渡し", "access.overseasShort": "海外で引き渡し", "access.unknown": "国際区間の AS 照会に失敗",
+      "access.direct": "直結", "access.transit": "中継", "access.long": "長距離中継", "access.local": "現地で引き渡し", "access.overseas": "{x} 経由・海外で引き渡し", "access.overseasShort": "海外で引き渡し", "access.unknown": "国際区間の AS 照会に失敗",
       "conf.inferred": "推定", "conf.insufficient": "根拠不足", "unreached": "未到達",
       "none.short": "中国キャリア網外",
       "ev.none.noCarrier": "経路上に中国電信 / 聯通 / 移動の AS がありません",
@@ -291,6 +294,7 @@
       "ev.sep": "；", "list.sep": "、",
       "intl.inside": "サーバーは中国キャリア網内にあります", "intl.direct": "サーバーは中国キャリアに直結",
       "intl.long": "；国際キャリアの中継 {ms} ms（長距離中継）",
+      "intl.carried": "；国際キャリアの中継 {ms} ms（直結ではない）",
       "intl.shortOverseas": "；国際キャリアの中継は {ms} ms のみ（海外で中国キャリアへ引き渡し、直結ではない）",
       "intl.shortLocal": "；国際キャリアの中継は {ms} ms のみ（現地で中国キャリアへ引き渡し、直結ではない）",
       "seg.lan": "LAN / ローカルゲートウェイ", "seg.lanIp": "LAN", "seg.unknown": "不明な AS", "seg.local": "中国{x} 地域網", "seg.geoFixed": "遅延から補正（nexttrace の表示：{x}）",
@@ -419,6 +423,7 @@
   function access(lang, r) {
     if (!r) return "";
     if (r.connect === "direct") return t(lang, "access.direct");
+    if (r.connect === "transit") return t(lang, "access.transit");
     if (r.connect === "long_haul") return t(lang, "access.long");
     if (r.connect === "local_transit") return t(lang, "access.local");
     if (r.connect === "unknown") return t(lang, "access.unknown");
@@ -459,7 +464,8 @@
     if (!r.intl || !r.intl.length) return t(lang, n.kind === "inside" ? "intl.inside" : "intl.direct");
     var list = r.intl.map(function (x) { return (asName(lang, x.asn, x.name) || "AS" + x.asn) + " (AS" + x.asn + ")"; }).join(" → ");
     if (n.ms === null || n.ms === undefined) return list;
-    return list + t(lang, n.long ? "intl.long" : n.overseas ? "intl.shortOverseas" : "intl.shortLocal", { ms: n.ms });
+    var k = n.long ? "intl.long" : n.ownLeg ? "intl.shortOverseas" : n.ownLeg === false ? "intl.carried" : n.overseas ? "intl.shortOverseas" : "intl.shortLocal";
+    return list + t(lang, k, { ms: n.ms });
   }
   function segName(lang, s) {
     if (!s) return "";

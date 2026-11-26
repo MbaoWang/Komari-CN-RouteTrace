@@ -12,6 +12,7 @@ let gen = 0;
 let offset = 0;
 let lastToken = "";
 let chatLang = {}; // chat id → 最後一次互動的語言
+let routeState = {}; // [nodeUuid][targetKey] → { confirmed, pending }（連續 2 輪確認防抖）
 
 function esc(s) {
   return String(s === undefined || s === null ? "" : s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
@@ -419,10 +420,11 @@ function loadState() {
     const s = JSON.parse(require("fs").readFileSync(deps.storeDir + "/telegram.json", "utf8"));
     offset = s.offset || 0;
     chatLang = s.lang || {};
-  } catch (_) { offset = 0; chatLang = {}; }
+    routeState = s.routes && typeof s.routes === "object" ? s.routes : {};
+  } catch (_) { offset = 0; chatLang = {}; routeState = {}; }
 }
 function saveState() {
-  try { require("fs").writeFileSync(deps.storeDir + "/telegram.json", JSON.stringify({ offset, lang: chatLang })); } catch (_) {}
+  try { require("fs").writeFileSync(deps.storeDir + "/telegram.json", JSON.stringify({ offset, lang: chatLang, routes: routeState })); } catch (_) {}
 }
 
 // 指令說明依 Telegram 使用者語言顯示（language_code 只能是兩碼，zh 依預設語言決定繁 / 簡）
@@ -492,9 +494,9 @@ const GENERIC_NET = {
 };
 const NET_FAMILY = { CTGNet: "ct", "CN2 GIA": "ct", "CN2 GT": "ct", CN2: "ct", "9929": "cu", "10099": "cu", CMIN2: "cm", CMI: "cm" };
 function routeSummary(t) {
-  const r = t.route;
+  const r = t && t.route;
   if (!r || !r.chip) return null; // 舊格式的結果不比較，避免插件更新後誤報
-  if (r.connect === "unknown" || r.connect === "none" || r.intl_unknown) return null; // AS 查詢失敗或未入三網的那次不比較，避免誤報
+  if (r.connect === "unknown" || r.connect === "none" || r.intl_unknown || r.confidence === "insufficient") return null; // 查無 AS、未入三網或證據不足（例如單跳 CN2）不比較，避免誤報
   // 第一行開頭是交接業者時先去掉（交接業者另外比較）
   const withTransit = !!r.handover && (r.chain || [])[0] === r.handover;
   const nets = (r.chain || []).slice(withTransit ? 1 : 0);
@@ -507,12 +509,18 @@ function routeSummary(t) {
     if (prev && prev.fam === fam && (generic || prev.name === n)) continue;
     classes.push({ fam, generic: !!generic, name: generic ? "generic:" + fam : n });
   }
+  // 接入方式只區分「直連」與「轉接」，不因轉接細分（海外交接 / 當地交接 / 長途承載）漂移而誤報
+  const conn = r.connect === "direct" ? "direct" : "transit";
   return {
     transit: r.handover || "",
-    connect: r.connect || "",
+    connect: conn,
     classes,
-    key: [r.connect, r.handover || "", classes.map((c) => c.name).join("→")].join("|"),
+    key: [conn, r.handover || "", classes.map((c) => c.name).join("→")].join("|"),
   };
+}
+
+function snapshotRoute(r) {
+  return { chain: r.chain, chip: r.chip, connect: r.connect, handover: r.handover };
 }
 
 function describeChange(L, a, b) {
@@ -538,29 +546,60 @@ function describeChange(L, a, b) {
 }
 
 async function notifyChange(prev, node) {
-  if (!deps || !prev || !prev.targets || !prev.targets.length) return;
+  if (!deps || !node || !node.targets || !node.targets.length) return;
   const cfg = await deps.getCfg();
   if (!cfg.tgToken || !cfg.tgNotify || !cfg.tgChats.length) return;
   const key = (t) => t.label + "|" + (t.v || 4) + (t.big ? "|big" : "");
   const before = {};
-  for (const t of prev.targets) before[key(t)] = t;
+  for (const t of (prev && prev.targets) || []) before[key(t)] = t;
+  const ns = routeState[node.uuid] || (routeState[node.uuid] = {});
   const changed = [];
+  let dirty = false;
   for (const t of node.targets || []) {
-    const old = before[key(t)];
-    if (!old) continue;
-    const a = routeSummary(old);
+    const k = key(t);
     const b = routeSummary(t);
-    if (a && b && a.key !== b.key) changed.push({ t, old, a, b });
+    const st = ns[k];
+    if (!b) {
+      if (st && st.pending) { delete st.pending; dirty = true; }
+      continue;
+    }
+    if (!st || !st.confirmed || !st.confirmed.summary) {
+      const old = before[k];
+      const a = old ? routeSummary(old) : null;
+      if (a && a.key !== b.key) {
+        ns[k] = { confirmed: { summary: a, route: snapshotRoute(old.route) }, pending: { key: b.key } };
+      } else {
+        ns[k] = { confirmed: { summary: b, route: snapshotRoute(t.route) } };
+      }
+      dirty = true;
+      continue;
+    }
+    if (b.key === st.confirmed.summary.key) {
+      st.confirmed.route = snapshotRoute(t.route);
+      if (st.pending) delete st.pending;
+      dirty = true;
+      continue;
+    }
+    // 連續 2 輪出現相同新路線才視為真正變更並推播，避免單跳逾時造成誤報
+    if (st.pending && st.pending.key === b.key) {
+      changed.push({ t, oldRoute: st.confirmed.route, a: st.confirmed.summary, b });
+      ns[k] = { confirmed: { summary: b, route: snapshotRoute(t.route) } };
+      dirty = true;
+    } else {
+      st.pending = { key: b.key };
+      dirty = true;
+    }
   }
+  if (dirty) saveState();
   if (!changed.length) return;
   for (const chat of cfg.tgChats) {
     const L = chatLang[chat] || defaultLang(cfg);
-    const lineOf = (x) => I18N.chip(L, x.route) + I18N.paren(L, I18N.access(L, x.route));
-    const blocks = changed.map(({ t, old, a, b }) => [
+    const lineOf = (r) => I18N.chip(L, r) + I18N.paren(L, I18N.access(L, r));
+    const blocks = changed.map(({ t, oldRoute, a, b }) => [
       `${ISP_ICON[t.isp] || "⚪️"} <b>${esc(targetName(L, t))}${t.v === 6 ? " (IPv6)" : ""}${t.big ? " · " + esc(I18N.t(L, "big.desc", { port: t.port, size: t.psize })) : ""}</b>`,
       ...describeChange(L, a, b).map((x) => `　• ${esc(x)}`),
-      `　${esc(I18N.t(L, "tg.before"))}: ${esc(lineOf(old))}`,
-      `　${esc(I18N.t(L, "tg.after"))}: <b>${esc(lineOf(t))}</b>`,
+      `　${esc(I18N.t(L, "tg.before"))}: ${esc(lineOf(oldRoute))}`,
+      `　${esc(I18N.t(L, "tg.after"))}: <b>${esc(lineOf(t.route))}</b>`,
     ].join("\n"));
     const text = `${I18N.t(L, "tg.changed", { x: esc(node.name) })}\n\n${blocks.join("\n\n")}`;
     try { await send(cfg, chat, text, nodeButtons(L, node)); } catch (e) { deps.log("推播失敗", chat, e.message || String(e)); }

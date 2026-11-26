@@ -497,6 +497,7 @@ function asLabel(asn, owner) {
 // opts.transitRtt：國際業者承載的延遲超過這個毫秒數，才在標籤寫出國際業者（預設 50）
 // 國際業者最後一跳 → 三網第一跳的延遲增加超過這個值，表示看不到三網自己的海外段
 const HANDOFF_JUMP_MS = 20;
+const NEAR_HANDOFF_MS = 20;
 function classify(hops, isp, dst, opts) {
   opts = opts || {};
   const transitRtt = Number.isFinite(Number(opts.transitRtt)) ? Number(opts.transitRtt) : 50;
@@ -527,7 +528,7 @@ function classify(hops, isp, dst, opts) {
   // 入境前有跳點查不到 AS（nexttrace 的資料 API 失敗、RIPEstat 也查不到）：看不出經過哪些國際業者，不能當成直連
   res.intl_unknown = before.some((h, k) => (k > 0 || h.idx > 0) && h.failed);
   const srcInside = entry === 0 && (opts.srcASN ? !!familyOf(Number(opts.srcASN)) : pub[0].idx === 0);
-  res.intl_note = { kind: res.intl_unknown && !res.intl.length ? "unknown" : res.intl.length ? "transit" : srcInside ? "inside" : "direct", ms: null, long: false, overseas: false };
+  res.intl_note = { kind: res.intl_unknown && !res.intl.length ? "unknown" : res.intl.length ? "transit" : srcInside ? "inside" : "direct", ms: null, long: false, overseas: false, ownLeg: false };
 
   // 交接延遲：機房第一跳 → 第一個三網跳點之間增加的延遲。
   // 路由器回應 ICMP 常被降低優先而虛高，所以每一跳取「這跳以及之後所有跳點的最低延遲」。
@@ -541,7 +542,6 @@ function classify(hops, isp, dst, opts) {
   for (let i = eff.length - 1; i >= 0; i--) { if (eff[i] !== null) { lastEff = eff[i]; break; } }
   const farFromChina = eff[0] !== null && lastEff !== null && lastEff - eff[0] >= transitRtt;
   res.handoff_delta = entry > 0 && eff[0] !== null && eff[entry] !== null ? Math.round((eff[entry] - eff[0]) * 10) / 10 : null;
-  // 交接前延遲沒增加多少（例如 NTT 在美國當地就交給電信）→ 國際業者只是機房旁的一小段，不寫進標籤
   // 國際業者承載了多遠：看它自己最後一跳的延遲（不是第一個三網跳點，
   // 因為三網的海外交接點常常沒回應，第一個看到的三網跳點可能已經跨海進到國內）
   let lastIntlIdx = -1;
@@ -553,18 +553,30 @@ function classify(hops, isp, dst, opts) {
   const carried = res.transit_delta !== null ? res.transit_delta : res.handoff_delta;
   res.transit_shown = res.intl.length > 0 && (carried === null || carried >= transitRtt);
   const inChina = (g) => !/台湾|台灣|Taiwan/i.test(g || "") && /中国|中國|香港|澳门|澳門|China|Hong ?Kong|Macau/i.test(g || "");
+  // 判斷機房本身是否在中國 / 香港 / 澳門：只看延遲與機房相差 <= 10 ms 的近跳（已經 fixGeo 校正），
+  // 依不同網路（AS 或 /16）計票，避免單一跳點標錯註冊地。
+  const nearChinaNets = new Set(), nearAbroadNets = new Set();
+  for (let i = 0; i < pub.length; i++) {
+    const h = pub[i];
+    if (!h.geo || eff[i] === null || eff[0] === null || eff[i] - eff[0] > 10) continue;
+    const nid = h.asn ? "AS" + h.asn : ip16(h.ip);
+    if (inChina(h.geo)) nearChinaNets.add(nid);
+    else nearAbroadNets.add(nid);
+  }
+  const homeGeoKnown = nearChinaNets.size > 0 || nearAbroadNets.size > 0;
+  const homeIsChina = homeGeoKnown && nearChinaNets.size >= nearAbroadNets.size;
   if (entry >= 0) {
     let seenCn2 = false;
     for (let k = entry; k < pub.length; k++) {
       const h = pub[k];
       if (!h.fam || h.dst) break;
       if (h.asn === 4809) seenCn2 = true;
-      // 有地理位置時以位置為準；無地理位置時（mtr / traceroute）須同時滿足距離機房 < transitRtt
-      // 且後續仍有顯著跨海延遲，才視為海外節點，避免香港等鄰近機房把國內省網跳點誤判成海外 163 骨幹
-      const foreign = h.geo
-        ? !inChina(h.geo)
-        : farFromChina && eff[k] !== null && eff[0] !== null && lastEff !== null &&
-          eff[k] - eff[0] < transitRtt && lastEff - eff[k] >= HANDOFF_JUMP_MS;
+      // 物理延遲明確證實仍在海外近端（機房不在中國/香港，這跳離機房 < 20 ms 且後續仍有 >= 20 ms 跨海延遲）；
+      // 或有地理位置標示在海外（排除中國/香港機房本地跳點被誤標）。
+      const nearAbroadByRtt = (homeGeoKnown ? !homeIsChina : farFromChina) &&
+        eff[k] !== null && eff[0] !== null && lastEff !== null &&
+        eff[k] - eff[0] < NEAR_HANDOFF_MS && lastEff - eff[k] >= HANDOFF_JUMP_MS;
+      const foreign = nearAbroadByRtt || (!!h.geo && !inChina(h.geo) && !(homeIsChina && eff[k] !== null && eff[0] !== null && eff[k] - eff[0] <= 10));
       if (!foreign) break;
       if (!h.bb && !(seenCn2 && h.asn === 4134 && !h.geo)) {
         h.bb = { 4134: "163", 4837: "169", 9808: "cmnet" }[h.asn] || "";
@@ -758,29 +770,43 @@ function classify(hops, isp, dst, opts) {
   if (nets.length >= 2 && nets[nets.length - 1] === "9808" && /^CMI/.test(nets[nets.length - 2])) nets.pop();
 
   // 交接寫法：
-  //   直連：機房直接接三網                              → 只寫網路，例如「CN2 GIA」「CTGNet → 4134(163) → 4837(169)」
-  //   海外交接：國際業者在海外就交給三網（例如 NTT 在聖荷西交給 163 的海外節點）→ 只寫網路「4134(163)」，業者寫在小字
-  //   香港 / 國內交接、或國際業者長途承載            → 寫交接「Lumen → CMI」「Verizon → 4837(169)」
-  //   海外交接只在「看得到三網自己的海外節點、交接時延遲沒有跳一大段」時省略業者
-  //   （三網自己的國際線路帶回國，例如 NTT 在聖荷西交給 163 的 218.30.x）；
-  //   CMI / CMIN2 等國際網也一樣：在海外就交給 CMI、走移動自己的骨幹回國 → 只寫「CMI」；
-  //   交接後延遲大跳（看不到三網自己的海外段，例如 SoftBank 2.7 ms → CMI 52 ms）→ 寫「SoftBank → CMI」
+  //   直連：機房直接接三網                                 → 只寫網路，例如「CN2 GIA」「CTGNet → 4134(163)」
+  //   海外交接：延遲明確證實國際業者在機房旁就交給三網（< 20 ms 且交接無大跳），
+  //             後面由三網自己的骨幹跨海回國（>= 20 ms）    → 只寫網路「4134(163)」「CMI」，業者寫在小字
+  //   其餘走國際業者（含長途、近岸跨海或看不到三網海外段） → 一律寫「業者 → 三網 · 轉接」，不受 GeoIP 漂移影響
   let showTransit = false;
   const entryHop = entry >= 0 ? pub[entry] : null;
   const jump = lastIntlIdx >= 0 && entryHop && eff[lastIntlIdx] !== null && eff[entry] !== null ? Math.round((eff[entry] - eff[lastIntlIdx]) * 10) / 10 : null;
   res.handoff_jump = jump;
-  if (!last) res.connect = res.intl_unknown ? "unknown" : "direct";
-  else if (res.transit_shown) { res.connect = "long_haul"; showTransit = true; }
-  else if (!res.handoff_overseas && (res.handoff_geo_known || !farFromChina)) { res.connect = "local_transit"; showTransit = true; }
-  else {
+  const handoffLimit = Math.min(NEAR_HANDOFF_MS, transitRtt);
+  const serverAbroad = homeGeoKnown ? !homeIsChina : farFromChina;
+  const ownLeg = !!(
+    last &&
+    entryHop &&
+    serverAbroad &&
+    carried !== null && carried < handoffLimit &&
+    jump !== null && jump < HANDOFF_JUMP_MS &&
+    eff[entry] !== null && eff[0] !== null && eff[entry] - eff[0] < NEAR_HANDOFF_MS &&
+    lastEff !== null && lastEff - eff[entry] >= HANDOFF_JUMP_MS
+  );
+  if (res.intl.length && carried !== null) {
+    res.intl_note.ownLeg = ownLeg;
+  }
+  if (!last) {
+    res.connect = res.intl_unknown ? "unknown" : "direct";
+  } else if (ownLeg) {
     res.connect = "overseas_transit";
-    // 三網第一跳有位置時以位置為準（例如 CMI 223.120.2.x 標東京，即使它回應 ICMP 較慢、延遲看起來大跳，
-    // 也是 CMI 在東京接手）；沒有位置時才用「交接後延遲有沒有大跳」判斷
-    const ownLeg = !!(entryHop && entryHop.overseas && (entryHop.geo || jump === null || jump < HANDOFF_JUMP_MS));
-    showTransit = !ownLeg;
-    if (!ownLeg && jump !== null) res.ev.push(E("ev.gap.jump", { x: res.handover, ms: jump }));
-    // 為什麼不寫業者：在海外就交給三網，跨海由三網自己的骨幹承載
-    if (ownLeg && nets.length && !/^(prov|mix):/.test(nets[0])) res.ev.push(E(entryHop.geo ? "ev.ownLeg" : "ev.ownLegNoGeo", { x: res.handover, n: nets[0], g: entryHop.geo }));
+    showTransit = false;
+    if (nets.length && !/^(prov|mix):/.test(nets[0])) {
+      const overseasGeo = entryHop.geo && !inChina(entryHop.geo) ? entryHop.geo : "";
+      res.ev.push(E(overseasGeo ? "ev.ownLeg" : "ev.ownLegNoGeo", { x: res.handover, n: nets[0], g: overseasGeo }));
+    }
+  } else {
+    res.connect = "transit";
+    showTransit = true;
+    if (serverAbroad && carried !== null && carried < handoffLimit && jump !== null && jump >= HANDOFF_JUMP_MS) {
+      res.ev.push(E("ev.gap.jump", { x: res.handover, ms: jump }));
+    }
   }
 
   res.chain = (showTransit ? [res.handover] : []).concat(nets);
